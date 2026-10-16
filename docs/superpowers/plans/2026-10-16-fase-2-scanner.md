@@ -25,10 +25,10 @@
 - Create: `pairs_desk/market_scanner.py`
 - Test: `tests/test_market_scanner.py`
 
-- [ ] Escribir tests RED para listar pares, calcular ratio actual/cambio 24h y distinguir `no_data`.
-- [ ] Implementar `list_pairs` y `MarketScanner.scan` con dependencias inyectables.
-- [ ] Ejecutar tests focalizados GREEN.
-- [ ] Commit `feat: add read-only market scanner service`.
+- [x] Escribir tests RED para listar pares, calcular ratio actual/cambio 24h y distinguir `no_data`.
+- [x] Implementar `list_pairs` y `MarketScanner.scan` con dependencias inyectables.
+- [x] Ejecutar tests focalizados GREEN.
+- [x] Commit `feat: add read-only market scanner service`.
 
 ### Task 2: Endpoint read-only
 
@@ -36,10 +36,10 @@
 - Modify: `read_only_server.py`
 - Test: `tests/test_market_scanner_api.py`
 
-- [ ] Escribir tests RED para parámetros, límite y respuesta JSON.
-- [ ] Agregar `GET /api/scanner` sin red ni órdenes.
-- [ ] Ejecutar tests focalizados y revisar aislamiento.
-- [ ] Commit `feat: expose read-only scanner endpoint`.
+- [x] Escribir tests RED para parámetros, límite y respuesta JSON.
+- [x] Agregar `GET /api/scanner` sin red ni órdenes.
+- [x] Ejecutar tests focalizados y revisar aislamiento.
+- [x] Commit `feat: expose read-only scanner endpoint`.
 
 ### Task 3: Vista React Explorador
 
@@ -47,11 +47,11 @@
 - Create: `react_frontend/src/components/Scanner.tsx`
 - Modify: `react_frontend/src/api.ts`, `react_frontend/src/types.ts`, `react_frontend/src/App.tsx`, `react_frontend/src/style.css`
 
-- [ ] Agregar tipos y cliente `fetchScanner`.
-- [ ] Reemplazar placeholder de “Explorador” por tabla, filtros, selección y detalle.
-- [ ] Mantener explícitamente el límite analítico/no-trading.
-- [ ] Ejecutar build React.
-- [ ] Commit `feat: add React pair explorer`.
+- [x] Agregar tipos y cliente `fetchScanner`.
+- [x] Reemplazar placeholder de “Explorador” por tabla, filtros, selección y detalle.
+- [x] Mantener explícitamente el límite analítico/no-trading.
+- [x] Ejecutar build React.
+- [x] Commit `feat: add React pair explorer`.
 
 ### Task 4: Documentación y verificación final
 
@@ -59,8 +59,8 @@
 - Modify: `README.md`
 - Modify: `ROADMAP_PAIRS_DESK_2_0_EXPANSION.md`
 
-- [ ] Documentar endpoint y límites de la primera versión.
-- [ ] Marcar Fase 2 MVP implementada.
-- [ ] Ejecutar suite Python, build React, `git diff --check` y revisión de aislamiento.
+- [x] Documentar endpoint y límites de la primera versión.
+- [x] Marcar Fase 2 MVP implementada.
+- [x] Ejecutar suite Python, build React, `git diff --check` y revisión de aislamiento.
 - [ ] Commit `docs: document pair scanner`.
 - [ ] Push `main` y verificar remoto.
