@@ -34,16 +34,17 @@ def instrument_id(symbol: str, venue: str) -> str:
     return f'{clean_venue}:{clean_symbol}'
 
 
-def pair_id(long_instrument_id: str, short_instrument_id: str) -> str:
-    def normalize(value: str) -> str:
-        raw = str(value).strip()
-        venue, separator, symbol = raw.partition(':')
-        if not separator:
-            raise ValueError(f'Instrumento inválido: {value}')
-        return instrument_id(symbol, venue)
+def _normalize_instrument_ref(value: str) -> str:
+    raw = str(value).strip()
+    venue, separator, symbol = raw.partition(':')
+    if not separator:
+        raise ValueError(f'Instrumento inválido: {value}')
+    return instrument_id(symbol, venue)
 
-    long_id = normalize(long_instrument_id)
-    short_id = normalize(short_instrument_id)
+
+def pair_id(long_instrument_id: str, short_instrument_id: str) -> str:
+    long_id = _normalize_instrument_ref(long_instrument_id)
+    short_id = _normalize_instrument_ref(short_instrument_id)
     if not long_id or not short_id:
         raise ValueError('Las patas del par no pueden estar vacías')
     if long_id == short_id:
@@ -192,8 +193,8 @@ class MarketCatalog:
         active: bool = True,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        long_id = str(long_instrument_id).strip()
-        short_id = str(short_instrument_id).strip()
+        long_id = _normalize_instrument_ref(long_instrument_id)
+        short_id = _normalize_instrument_ref(short_instrument_id)
         ident = pair_id(long_id, short_id)
         display_label = str(label).strip() if label is not None else f'{long_id}/{short_id}'
         with closing(self.connect()) as db, db:

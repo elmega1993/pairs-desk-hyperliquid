@@ -40,3 +40,14 @@ def test_catalog_upserts_pair_and_returns_it(tmp_path):
 
     assert row['pair_id'] == 'core:ETH__core:BTC'
     assert catalog.get_pair(row['pair_id']) == row
+
+
+def test_catalog_normalizes_pair_references(tmp_path):
+    catalog = MarketCatalog(tmp_path / 'market.sqlite3')
+    catalog.upsert_instrument('ETH', 'core')
+    catalog.upsert_instrument('BTC', 'core')
+
+    row = catalog.upsert_pair('CORE:ETH', 'CORE:BTC')
+
+    assert row['long_instrument_id'] == 'core:ETH'
+    assert row['short_instrument_id'] == 'core:BTC'
