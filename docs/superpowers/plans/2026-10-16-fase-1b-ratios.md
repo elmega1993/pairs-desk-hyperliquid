@@ -37,19 +37,19 @@
 - Produces: `RatioResult` with `pair_id`, `frame`, `matched_rows`, `missing_long`, `missing_short`, `status`, `error`.
 - Produces: `build_pair_ratios(long_candles, short_candles, *, pair_id) -> RatioResult`.
 
-- [ ] **Step 1: Write failing tests** covering exact timestamp intersection, `price_ratio`, `log_ratio`, `complete`, `partial` and `empty`.
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 1: Write failing tests** covering exact timestamp intersection, `price_ratio`, `log_ratio`, `complete`, `partial` and `empty`.
+- [x] **Step 2: Run focused tests and verify RED**
 
   Run: `PYTHONPATH=. uv run --with-requirements requirements.txt pytest -q tests/test_market_ratios.py`
 
   Expected: FAIL because `pairs_desk.market_ratios` does not exist.
 
-- [ ] **Step 3: Implement the minimal immutable result and exact inner alignment**
+- [x] **Step 3: Implement the minimal immutable result and exact inner alignment**
 
   Use a dataclass and a merge on `timestamp_ms`; preserve ascending timestamp order and calculate the two ratios from closing prices.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 5: Commit**
 
   `git commit -m "feat: add pair ratio contract"`
 
@@ -63,17 +63,17 @@
 - Consumes: canonical candle columns from `market_quality.CANONICAL_COLUMNS`.
 - Produces: deterministic `error` results for invalid schemas, incompatible identities/intervals, duplicates and invalid prices.
 
-- [ ] **Step 1: Add failing regression tests** for missing columns, duplicate timestamps, mismatched instrument/venue/interval, zero/negative/non-finite closes and missing timestamps.
-- [ ] **Step 2: Run focused tests and verify RED**
-- [ ] **Step 3: Implement validation before merge/division**
+- [x] **Step 1: Add failing regression tests** for missing columns, duplicate timestamps, mismatched instrument/venue/interval, zero/negative/non-finite closes and missing timestamps.
+- [x] **Step 2: Run focused tests and verify RED**
+- [x] **Step 3: Implement validation before merge/division**
 
   Return an error result with an explanatory message; never raise for expected data-quality failures and never emit partial ratios in `error` state.
 
-- [ ] **Step 4: Run focused tests and full market-data tests**
+- [x] **Step 4: Run focused tests and full market-data tests**
 
   Run: `PYTHONPATH=. uv run --with-requirements requirements.txt pytest -q tests/test_market_ratios.py tests/test_market_catalog.py tests/test_market_market_data.py tests/test_market_ingestion.py`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   `git commit -m "feat: validate pair ratio inputs"`
 
@@ -84,19 +84,19 @@
 - Modify: `ROADMAP_PAIRS_DESK_2_0_EXPANSION.md`
 - Modify: `docs/superpowers/plans/2026-10-16-fase-1b-ratios.md`
 
-- [ ] **Step 1: Document the internal ratio contract and explicit non-goals**
-- [ ] **Step 2: Mark Fase 1B as implemented/in progress according to the final verified state**
-- [ ] **Step 3: Inspect isolation with `rg`**
+- [x] **Step 1: Document the internal ratio contract and explicit non-goals**
+- [x] **Step 2: Mark Fase 1B as implemented/in progress according to the final verified state**
+- [x] **Step 3: Inspect isolation with `rg`**
 
   Confirm no runtime or trading route imports `market_ratios`.
 
-- [ ] **Step 4: Commit documentation**
+- [x] **Step 4: Commit documentation**
 
   `git commit -m "docs: document phase 1B ratio layer"`
 
 ### Task 4: Verificación completa y revisión final
 
-- [ ] **Step 1: Run the complete Python suite**
-- [ ] **Step 2: Build React**
-- [ ] **Step 3: Run `git diff --check` and review the final diff**
+- [x] **Step 1: Run the complete Python suite**
+- [x] **Step 2: Build React**
+- [x] **Step 3: Run `git diff --check` and review the final diff**
 - [ ] **Step 4: Push `main` only after all checks pass and verify remote HEAD**
