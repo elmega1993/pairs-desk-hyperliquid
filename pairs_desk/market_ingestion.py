@@ -92,7 +92,7 @@ class MarketIngestor:
             rows = self.fetch(
                 type='candleSnapshot',
                 req={
-                    'coin': instrument['symbol'],
+                    'coin': instrument['symbol'] if instrument['venue'] == 'core' else f"{instrument['venue']}:{instrument['symbol']}",
                     'interval': interval,
                     'startTime': int(start_ms),
                     'endTime': int(end_ms),

@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+import numpy as np
 import pandas as pd
 
 CANONICAL_COLUMNS = [
@@ -79,7 +80,7 @@ def validate_candles(frame: pd.DataFrame) -> QualityReport:
     timestamps = pd.to_numeric(frame['timestamp_ms'], errors='coerce')
     numeric = frame[['open', 'high', 'low', 'close', 'volume']].apply(pd.to_numeric, errors='coerce')
     duplicate_count = int(frame['timestamp_ms'].duplicated(keep=False).sum())
-    if not timestamps.notna().all() or not numeric.notna().all().all():
+    if not np.isfinite(timestamps.to_numpy()).all() or not np.isfinite(numeric.to_numpy()).all():
         return QualityReport(False, len(frame), duplicate_count, (), 'Hay timestamps o valores no finitos')
     if not timestamps.is_monotonic_increasing:
         return QualityReport(False, len(frame), duplicate_count, (), 'Los timestamps no están ordenados')

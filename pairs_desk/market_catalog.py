@@ -35,8 +35,15 @@ def instrument_id(symbol: str, venue: str) -> str:
 
 
 def pair_id(long_instrument_id: str, short_instrument_id: str) -> str:
-    long_id = str(long_instrument_id).strip()
-    short_id = str(short_instrument_id).strip()
+    def normalize(value: str) -> str:
+        raw = str(value).strip()
+        venue, separator, symbol = raw.partition(':')
+        if not separator:
+            raise ValueError(f'Instrumento inválido: {value}')
+        return instrument_id(symbol, venue)
+
+    long_id = normalize(long_instrument_id)
+    short_id = normalize(short_instrument_id)
     if not long_id or not short_id:
         raise ValueError('Las patas del par no pueden estar vacías')
     if long_id == short_id:

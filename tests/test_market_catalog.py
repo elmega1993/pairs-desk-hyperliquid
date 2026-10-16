@@ -7,7 +7,7 @@ def test_instrument_ids_keep_core_and_xyz_separate():
     assert instrument_id('eth', 'core') == 'core:ETH'
     assert instrument_id('ETH', 'xyz') == 'xyz:ETH'
     assert instrument_id('ETH', 'core') != instrument_id('ETH', 'xyz')
-    assert pair_id('core:ETH', 'core:BTC') == 'core:ETH__core:BTC'
+    assert pair_id('CORE:ETH', 'core:BTC') == 'core:ETH__core:BTC'
 
 
 def test_catalog_upsert_preserves_identity_and_lists_normalized_rows(tmp_path):

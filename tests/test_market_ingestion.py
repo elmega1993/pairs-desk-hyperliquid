@@ -48,6 +48,21 @@ def test_repeated_sync_is_idempotent(tmp_path):
     assert ingestor.get_checkpoint('core:ETH', '1m')['covered_to_ms'] == 2000
 
 
+def test_xyz_sync_uses_hyperliquid_xyz_coin_name(tmp_path):
+    catalog = MarketCatalog(tmp_path / 'market.sqlite3')
+    catalog.upsert_instrument('CL', 'xyz')
+    calls = []
+
+    def fetch(**payload):
+        calls.append(payload)
+        return ROWS
+
+    ingestor = MarketIngestor(catalog, MarketDataStore(tmp_path / 'market-data'), fetch)
+    ingestor.sync_candles('xyz:CL', '1m', 1000, 2000)
+
+    assert calls[0]['req']['coin'] == 'xyz:CL'
+
+
 def test_empty_or_malformed_response_does_not_advance_checkpoint(tmp_path):
     catalog = setup_catalog(tmp_path)
     responses = iter([[], {'unexpected': True}])

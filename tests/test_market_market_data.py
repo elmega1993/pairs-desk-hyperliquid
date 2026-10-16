@@ -60,6 +60,15 @@ def test_repeated_merge_is_idempotent(tmp_path):
     pd.testing.assert_frame_equal(loaded.reset_index(drop=True), frame.reset_index(drop=True))
 
 
+def test_infinite_volume_is_rejected(tmp_path):
+    frame = normalize_candles(raw_rows(), 'core:ETH', 'core', '1m')
+    frame.loc[0, 'volume'] = float('inf')
+
+    assert validate_candles(frame).valid is False
+    with pytest.raises(ValueError):
+        MarketDataStore(tmp_path / 'market-data').merge_candles(frame)
+
+
 def test_conflicting_existing_candle_is_rejected(tmp_path):
     frame = normalize_candles(raw_rows(), 'core:ETH', 'core', '1m')
     store = MarketDataStore(tmp_path / 'market-data')
