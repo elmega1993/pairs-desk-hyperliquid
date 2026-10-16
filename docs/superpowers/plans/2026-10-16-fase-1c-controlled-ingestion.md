@@ -53,5 +53,5 @@
 - [x] Document manual/external invocation and metrics.
 - [x] Mark Fase 1C as implemented without claiming a resident scheduler.
 - [x] Run full Python suite, React build and `git diff --check`.
-- [ ] Commit `docs: document controlled market ingestion`.
-- [ ] Push `main` and verify remote HEAD.
+- [x] Commit `docs: document controlled market ingestion`.
+- [x] Push `main` and verify remote HEAD.
