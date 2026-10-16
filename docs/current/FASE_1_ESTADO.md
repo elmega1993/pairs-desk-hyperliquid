@@ -11,8 +11,8 @@
 ## Pendiente
 - Cargar KLineCharts como módulo npm (hoy: `<script>` desde `/vendor`, con SHA-256 verificado al iniciar).
 - Validar con datos históricos reales que `pnl_history` tiene la definición contable esperada; no mezclar subtotal con PNL neto verificado.
-- Pendientes visuales: ver Fase 1c en `PLAN_CONSOLIDACION.md`.
-- Paridad con Aurora y secciones del estable (ver `PLAN_CONSOLIDACION.md`).
+- Pendientes visuales: ver Fase 1c en `docs/current/PLAN_CONSOLIDACION.md`.
+- Paridad con Aurora y secciones del estable (ver `docs/current/PLAN_CONSOLIDACION.md`).
 
 ## Nota sobre trading
 La interfaz React incluye **Agregar par** y **Operar par** (`components/PairActions.tsx`). No hay cambios en `secure_trade_routes.py`, el ledger ni la API, pero la UI de órdenes reales es nueva y **no está validada en testnet** (ver Fase 1b del plan).
