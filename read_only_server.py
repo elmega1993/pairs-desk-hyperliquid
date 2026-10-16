@@ -14,11 +14,16 @@ from pairs_desk.storage import load_settings
 from pairs_desk.frontend_archive import archive_frontend
 from pairs_desk.metrics import position_map, ratio_bars, liquidation_distance, closed_pair_trade_events, archived_pair_entry_ratio, management_signals
 from pairs_desk.ledger import Ledger, active_funding
+from pairs_desk.market_catalog import MarketCatalog
+from pairs_desk.market_scanner import MarketScanner
+from pairs_desk.market_storage import MarketDataStore
 from final_read_services import recent_fills, add_accounting, zscore_from_bars, funding_summary
 
 BASE = Path(__file__).resolve().parent
 SETTINGS = Path.home()/'.config'/'crypto-pairs-desk'/'settings.json'
 SNAPSHOTS = Path.home()/'.local'/'share'/'crypto-pairs-desk'/'frontend_snapshots.jsonl'
+MARKET_DB = Path.home()/'.local'/'share'/'crypto-pairs-desk'/'market.sqlite3'
+MARKET_DATA = Path.home()/'.local'/'share'/'crypto-pairs-desk'/'market-data'
 ADDRESS = re.compile(r'^0x[a-fA-F0-9]{40}$')
 API = 'https://api.hyperliquid.xyz/info'
 app = FastAPI(title='Pairs Desk · Terminal local', docs_url=None, redoc_url=None)
@@ -253,6 +258,20 @@ def api_state():
         with _STATES_LOCK: return states()
     except HTTPException:raise
     except Exception as exc:raise HTTPException(503,f'Error de lectura: {type(exc).__name__}')
+
+@app.get('/api/scanner')
+def api_scanner(interval: str = '1h', search: str = '', venue: str = '', limit: int = 50):
+    if interval not in ('5m', '15m', '1h', '4h', '1d', '1w'):
+        raise HTTPException(400, 'Intervalo inválido')
+    if not 1 <= limit <= 100:
+        raise HTTPException(400, 'Límite inválido (1-100)')
+    try:
+        scanner = MarketScanner(MarketCatalog(MARKET_DB), MarketDataStore(MARKET_DATA))
+        return scanner.scan(interval=interval, search=search, venue=venue, limit=limit).to_dict()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(503, f'No se pudo leer el Scanner: {type(exc).__name__}')
 
 @app.get('/api/chart/{pair_id}')
 def chart(pair_id:str,interval:str='1d',before:int|None=None,limit:int=600):
