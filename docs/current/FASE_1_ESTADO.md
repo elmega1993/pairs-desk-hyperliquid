@@ -6,7 +6,7 @@
 - Gráfico del ratio como componente TypeScript (`RatioChart.tsx`): no depende de `window.AuroraTradingChart` ni lee checkboxes del DOM. Se reinicializa solo con un par o velas nuevas; los niveles se actualizan por una firma de datos, así que se conserva el zoom.
 - Gráfico PNL (`PnlChart.tsx`) con eje temporal, escala USD, línea cero y tooltip. Los datos provienen solo de `/api/state` (`pnl_history`). Normaliza timestamps (segundos/milisegundos), ordena y reduce puntos por buckets preservando extremos.
 - Build condicional y `npm ci` con lockfile en el launcher.
-- Pulido visual verificado en navegador (ver `docs/visual/` y la entrada del CHANGELOG).
+- Pulido visual verificado en navegador (ver `docs/visual/` y la entrada de `docs/history/CHANGELOG.md`).
 
 ## Pendiente
 - Cargar KLineCharts como módulo npm (hoy: `<script>` desde `/vendor`, con SHA-256 verificado al iniciar).
