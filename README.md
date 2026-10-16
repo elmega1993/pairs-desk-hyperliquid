@@ -36,6 +36,17 @@ Este proyecto contiene rutas de trading reales, también desde la interfaz React
 - `tests/`: pruebas Python y suites JavaScript.
 - `scripts/`: utilidades y backtests.
 
+## Datos históricos de mercado — Fase 1A
+
+La base de mercado está separada de la contabilidad y de la ejecución:
+
+- `~/.local/share/crypto-pairs-desk/market.sqlite3`: catálogo de instrumentos, pares y checkpoints de ingesta.
+- `~/.local/share/crypto-pairs-desk/market-data/candles/`: velas validadas en formato Parquet.
+- `~/.local/share/crypto-pairs-desk/ledger.sqlite3`: fills y funding de la cuenta.
+- `~/.local/share/crypto-pairs-desk/orders.sqlite3`: bitácora de intentos de trading.
+
+La ingesta de velas de Fase 1A es un servicio interno/manual. No se ejecuta al refrescar el dashboard, no modifica `/api/state` y no tiene acceso a las rutas de órdenes. Los módulos de catálogo, calidad, almacenamiento e ingesta se prueban de forma aislada antes de conectarlos a futuras pantallas.
+
 ## Documentación
 
 - `docs/history/CHANGELOG.md`: cambios verificados.
