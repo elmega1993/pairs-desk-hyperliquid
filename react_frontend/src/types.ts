@@ -8,3 +8,5 @@ export type AdaptiveLevels={status:string;regime:string;reason:string;levels:Rec
 
 export type PairAnalytics={status:string;reason?:string;z_log?:number|null;regime?:string;health?:{status?:string;half_life_days?:number|null};age_days?:number|null;age_vs_half_life?:number|null;mae_pct?:number|null;mfe_pct?:number|null;liq_distance_pct?:number|null;imbalance_pct?:number|null;funding_per_day_usd?:number|null;risk_usd_per_sigma_day?:number|null;pair_status?:string;pair_status_reason?:string;levels_v3?:AdaptiveLevels & {add_allowed?:boolean;equilibrium_ratio?:number;scenarios?:Record<string,unknown>}};
 export type AnalyticsResponse={as_of_ms:number;pairs:Record<string,PairAnalytics>};
+export type ScannerCandidate={pair_id:string;label:string;long:string;short:string;venue:string;status:string;reason?:string|null;ratio?:number|null;ratio_change_pct?:number|null;matched_rows:number;missing_long:number[];missing_short:number[]};
+export type ScannerResponse={interval:string;candidates:ScannerCandidate[];total:number;as_of_ms:number};
