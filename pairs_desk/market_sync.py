@@ -27,6 +27,15 @@ class SyncMetrics:
     skipped: bool = False
 
 
+@dataclass(frozen=True)
+class BatchSyncResult:
+    results: tuple[SyncMetrics, ...]
+    rows_received: int
+    rows_new: int
+    errors: int
+    duration_ms: int
+
+
 class MarketSyncService:
     def __init__(self, ingestor: MarketIngestor, *, clock: Callable[[], float] = time.monotonic):
         self.ingestor = ingestor
@@ -60,4 +69,36 @@ class MarketSyncService:
             effective_start, int(end_ms), result.rows_received, result.rows_new,
             result.covered_from_ms, result.covered_to_ms, result.gaps,
             duration_ms, result.status, result.error,
+        )
+
+    def sync_many(
+        self,
+        instrument_ids: tuple[str, ...] | list[str],
+        interval: str,
+        *,
+        end_ms: int,
+        initial_start_ms: int,
+    ) -> BatchSyncResult:
+        results: list[SyncMetrics] = []
+        for instrument_id in instrument_ids:
+            try:
+                result = self.sync_incremental(
+                    instrument_id,
+                    interval,
+                    end_ms=end_ms,
+                    initial_start_ms=initial_start_ms,
+                )
+            except Exception as exc:
+                result = SyncMetrics(
+                    instrument_id, interval, initial_start_ms, end_ms,
+                    None, None, 0, 0, None, None, (), 0, 'error', str(exc),
+                )
+            results.append(result)
+        frozen = tuple(results)
+        return BatchSyncResult(
+            frozen,
+            sum(result.rows_received for result in frozen),
+            sum(result.rows_new for result in frozen),
+            sum(result.status == 'error' for result in frozen),
+            sum(result.duration_ms for result in frozen),
         )

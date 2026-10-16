@@ -13,6 +13,7 @@ ROWS = [
 def setup(tmp_path, fetch, clock):
     catalog = MarketCatalog(tmp_path / 'market.sqlite3')
     catalog.upsert_instrument('ETH', 'core')
+    catalog.upsert_instrument('BTC', 'core')
     ingestor = MarketIngestor(catalog, MarketDataStore(tmp_path / 'market-data'), fetch)
     return MarketSyncService(ingestor, clock=clock)
 
@@ -67,3 +68,24 @@ def test_up_to_date_window_does_not_call_fetch(tmp_path):
     assert skipped.skipped is True
     assert skipped.rows_new == 0
     assert len(calls) == 1
+
+
+def test_sync_many_isolates_instrument_errors_and_aggregates_metrics(tmp_path):
+    def fetch(**payload):
+        if payload['req']['coin'] == 'BTC':
+            raise RuntimeError('BTC unavailable')
+        return ROWS
+
+    service = setup(tmp_path, fetch, iter([1.0, 1.1, 2.0, 2.2]).__next__)
+
+    batch = service.sync_many(
+        ('core:ETH', 'core:BTC'),
+        '1m',
+        end_ms=2000,
+        initial_start_ms=1000,
+    )
+
+    assert [result.status for result in batch.results] == ['complete', 'error']
+    assert batch.rows_new == 2
+    assert batch.errors == 1
+    assert batch.duration_ms == 300
