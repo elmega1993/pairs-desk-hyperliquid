@@ -104,3 +104,15 @@ def test_rejects_incompatible_instrument_and_interval_series():
     assert result.status == 'error'
     assert result.frame.empty
     assert 'incompatibles' in result.error
+
+
+def test_rejects_same_instrument_on_both_legs():
+    result = build_pair_ratios(
+        candles('core:ETH', [10.0, 20.0, 30.0]),
+        candles('core:ETH', [2.0, 4.0, 10.0]),
+        pair_id='core:ETH__core:ETH',
+    )
+
+    assert result.status == 'error'
+    assert result.frame.empty
+    assert 'distintas' in result.error

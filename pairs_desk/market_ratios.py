@@ -69,6 +69,10 @@ def build_pair_ratios(
         return _error(pair_id, long_error or short_error or 'Entradas inválidas')
     assert long_validated is not None and short_validated is not None
     if not long_validated.empty and not short_validated.empty:
+        long_instrument = str(long_validated['instrument_id'].iloc[0])
+        short_instrument = str(short_validated['instrument_id'].iloc[0])
+        if long_instrument == short_instrument:
+            return _error(pair_id, 'Las patas del par deben ser distintas')
         long_interval = str(long_validated['interval'].iloc[0])
         short_interval = str(short_validated['interval'].iloc[0])
         if long_interval != short_interval:
