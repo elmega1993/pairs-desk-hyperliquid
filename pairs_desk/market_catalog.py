@@ -217,3 +217,9 @@ class MarketCatalog:
         with closing(self.connect()) as db:
             row = db.execute('SELECT * FROM pairs WHERE pair_id=?', (str(ident).strip(),)).fetchone()
         return self._pair_row(row)
+
+    def list_pairs(self, *, active_only: bool = False) -> list[dict[str, Any]]:
+        clause = ' WHERE active=1' if active_only else ''
+        with closing(self.connect()) as db:
+            rows = db.execute(f'SELECT * FROM pairs{clause} ORDER BY pair_id').fetchall()
+        return [self._pair_row(row) for row in rows]  # type: ignore[list-item]
