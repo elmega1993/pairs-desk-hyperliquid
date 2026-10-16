@@ -40,7 +40,7 @@
 - `tests/test_react_sort_behavior.cjs` ya no usa una ruta absoluta de TypeScript.
 - Nuevo `tests/test_js_suites.py` ejecuta las suites de Node desde `pytest`; nuevo `tests/test_klinecharts_integrity.py`.
 - Repositorio git inicializado.
-- Documentación unificada: `FASE_1_PARTE_2.md` fusionado en `docs/FASE_1_ESTADO.md`; plan, dependencias y README actualizados.
+- Documentación unificada: `FASE_1_PARTE_2.md` fusionado en `docs/current/FASE_1_ESTADO.md`; plan, dependencias y README actualizados.
 - Sin cambios en backend, rutas de trading ni código React.
 
 ## Consolidación — Base React (Fase 1)
@@ -72,7 +72,7 @@
 - Núcleo estadístico puro y endpoints analíticos de solo lectura.
 - Cola de atención, tabla de seguimiento y detalle analítico en React.
 - Niveles descriptivos v3 y pruebas unitarias; no se activaron nuevas órdenes.
-- Ver `ANALYTICS_V3.md` para tareas pendientes y limitaciones.
+- Ver `docs/history/ANALYTICS_V3.md` para tareas pendientes y limitaciones.
 
 ## Pares cerrados: gráfico y revinculación (2026-10-15)
 - Gráfico KLineCharts para un par archivado, con intervalos e historial anterior.
