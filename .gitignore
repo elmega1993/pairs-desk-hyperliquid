@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv*/
+*.egg-info/
+# Frontend
+node_modules/
+react_dist/
+react_frontend/dist/
+# Runtime data, secrets and logs
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.jsonl
+settings.json
+settings.*.bak*
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+react_frontend/.build-source-sha256

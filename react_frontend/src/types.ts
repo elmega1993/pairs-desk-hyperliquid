@@ -1,0 +1,10 @@
+/** /api/state z is deprecated; use /api/analytics z_log when available. */
+export type Pair={id:string;long:string;short:string;pnl?:number|null;realized?:number|null;total_pnl?:number|null;funding?:number|null;fees?:number|null;size?:number|null;long_usd?:number|null;short_usd?:number|null;pnl_pct?:number|null;ratio?:number|null;entry_ratio?:number|null;ratio_change?:number|null;[key:string]:unknown};
+export type ClosedPair={id?:string;long?:string;short?:string;opened_at?:number|null;closed_at?:number|null;realized?:number|null;fees?:number|null;funding?:number|null;total_pnl?:number|null;net_realized?:number|null;size?:number|null;[key:string]:unknown};
+export type Data={pairs:Pair[];closed_pairs?:ClosedPair[];summary:Record<string,number|null>;warnings?:string[];pnl_history?:Record<string,unknown>[];last_updated_ms?:number;pnl_source?:string;hl_pnl?:Record<string,Record<string,unknown>[]>};
+export type Bar={timestamp:number;open:number;high:number;low:number;close:number};
+
+export type AdaptiveLevels={status:string;regime:string;reason:string;levels:Record<string,number>;level_reasons?:Record<string,string>;reference_source?:string;reference_ratio?:number;horizon_days?:number;samples?:number;as_of_ms?:number};
+
+export type PairAnalytics={status:string;reason?:string;z_log?:number|null;regime?:string;health?:{status?:string;half_life_days?:number|null};age_days?:number|null;age_vs_half_life?:number|null;mae_pct?:number|null;mfe_pct?:number|null;liq_distance_pct?:number|null;imbalance_pct?:number|null;funding_per_day_usd?:number|null;risk_usd_per_sigma_day?:number|null;pair_status?:string;pair_status_reason?:string;levels_v3?:AdaptiveLevels & {add_allowed?:boolean;equilibrium_ratio?:number;scenarios?:Record<string,unknown>}};
+export type AnalyticsResponse={as_of_ms:number;pairs:Record<string,PairAnalytics>};

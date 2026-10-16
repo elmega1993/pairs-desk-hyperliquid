@@ -1,0 +1,4 @@
+import type {Pair} from './types';
+export function parseSort(sort:string){const [raw,direction='desc']=sort.split(':');return {key:raw==='pnl_asc'?'pnl':raw,direction:direction==='asc'||raw==='pnl_asc'?'asc':'desc'} as const}
+export function nextSort(previous:string,key:string){const current=parseSort(previous);return `${key}:${current.key===key&&current.direction==='desc'?'asc':'desc'}`}
+export function sortPairs(pairs:Pair[],sort:string):Pair[]{const {key,direction}=parseSort(sort);const dir=direction==='asc'?1:-1;return [...pairs].sort((a,b)=>{const nameA=a.long+'/'+a.short,nameB=b.long+'/'+b.short;if(key==='name')return dir*nameA.localeCompare(nameB);const av=a[key],bv=b[key],an=av==null?NaN:Number(av),bn=bv==null?NaN:Number(bv);if(!Number.isFinite(an)&&!Number.isFinite(bn))return nameA.localeCompare(nameB);if(!Number.isFinite(an))return 1;if(!Number.isFinite(bn))return -1;return dir*(an-bn)||nameA.localeCompare(nameB)})}

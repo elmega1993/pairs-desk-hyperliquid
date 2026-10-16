@@ -1,0 +1,5 @@
+import type {Pair,PairAnalytics} from '../types';
+import {money,num} from '../format';
+export function PairTracker({pairs,analytics,onSelect}:{pairs:Pair[];analytics:Record<string,PairAnalytics>;onSelect:(id:string)=>void}){
+ return <section className="panel bottom"><h2>Seguimiento analítico</h2><div className="tablewrap"><table><thead><tr>{['Par','Estado','Z log','Régimen','Días / HL','MAE / MFE','Liq.','Funding/día','Flotante'].map(t=><th key={t}>{t}</th>)}</tr></thead><tbody>{pairs.map(p=>{const a=analytics[p.id];return <tr key={p.id} tabIndex={0} onClick={()=>onSelect(p.id)} onKeyDown={e=>{if(e.key==='Enter')onSelect(p.id)}}><td>{p.long}/{p.short}</td><td title={a?.pair_status_reason||''}>{a?.pair_status||'N/D'}</td><td>{num(a?.z_log)}</td><td>{a?.regime||'N/D'} · {a?.health?.status||'N/D'}</td><td>{num(a?.age_days)} / {num(a?.age_vs_half_life)}×</td><td>{num(a?.mae_pct)}% / {num(a?.mfe_pct)}%</td><td>{num(a?.liq_distance_pct)}%</td><td>{money(a?.funding_per_day_usd)}</td><td>{money(p.pnl)}</td></tr>})}</tbody></table></div></section>
+}

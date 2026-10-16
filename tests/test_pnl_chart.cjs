@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const {series}=require('../frontend/pnl-chart.js');
+const day=86400000;
+const rows=[{time:3*day,pnl:-4},{time:day,pnl:10},{time:2*day,pnl:null},{time:2*day,pnl:5},{time:3*day,pnl:-3}];
+assert.deepEqual(series(rows).map(x=>x.pnl),[10,5,-3]);
+assert.deepEqual(series(rows,'1d').map(x=>x.pnl),[5,-3]);
+assert.equal(series([{time:1,pnl:1},{time:2,pnl:2}],'all','1h')[0].pnl,2);
+assert.equal(series([{time:1,pnl:1,basis:'gross'},{time:2,pnl:2,basis:'net'}],'all','1h').length,2);
+assert.deepEqual(series([{time:1,pnl:null},{time:2,pnl:Infinity}]),[]);
+console.log('OK: PnL ranges, chronological ordering, deduplication, aggregation and missing data');
