@@ -80,11 +80,13 @@ Implementación interna completada; la programación residente queda deliberadam
 
 ### Fase 2 — Explorador de pares / Scanner
 
-- Buscar y filtrar combinaciones de activos compatibles con Hyperliquid/XYZ.
-- Examinar ratios y sus cambios recientes sin crear posiciones.
-- Ordenar candidatos mediante métricas estadísticas y filtros configurables.
-- Abrir un candidato directamente en el gráfico y enviarlo al Laboratorio o a la Watchlist.
-- Evitar barridos costosos en cada refresco de la interfaz.
+MVP implementado en React como módulo de solo lectura; quedan para iteraciones posteriores la apertura directa en el gráfico y los envíos al Laboratorio/Watchlist.
+
+- Buscar y filtrar pares activos del catálogo Core/XYZ.
+- Examinar ratio actual, variación aproximada de 24 horas, cobertura y estado.
+- Consultar únicamente el caché Parquet local, sin descargar datos en cada filtro.
+- Seleccionar un candidato y ver su detalle sin crear posiciones.
+- Mantener el escritorio operativo y las rutas de trading sin cambios.
 
 ### Fase 3 — Laboratorio estadístico de ratios
 
