@@ -10,13 +10,13 @@ Convertir Pairs Desk en una plataforma integral para descubrir, investigar, simu
 
 - React es la interfaz principal y FastAPI/Python es el backend operativo.
 - El escritorio actual consulta posiciones, precios, velas, analítica básica, riesgo y cierres.
-- Existe SQLite para ledger, diario de operaciones y configuraciones; todavía no existe un catálogo central de instrumentos de mercado.
-- Todavía no existe un almacén Parquet ni una ingesta histórica incremental compartida.
+- Existe SQLite separado para ledger, diario de operaciones y configuraciones, además del catálogo de mercado de Fase 1A.
+- Fase 1A ya dispone de almacén Parquet e ingesta histórica incremental compartida; Fase 1B agrega el contrato interno de ratios.
 - Explorador, Laboratorio y Watchlist tienen presencia parcial o conceptual, pero aún no son módulos funcionales independientes.
 - El backtesting disponible es básico y está limitado a niveles; no equivale todavía a un motor de validación walk-forward.
 - React contiene rutas de operaciones reales. La ejecución debe seguir aislada del catálogo, la investigación, el simulador y el backtesting.
 
-La siguiente entrega aprobada es la **Fase 1A — Catálogo e históricos de mercado**, especificada en `docs/superpowers/specs/2026-10-16-fase-1a-market-data-design.md`.
+La siguiente entrega aprobada fue la **Fase 1A — Catálogo e históricos de mercado**. La implementación actual continúa con **Fase 1B — Contratos de ratios y calidad histórica**, especificada en `docs/superpowers/specs/2026-10-16-fase-1b-ratios-design.md`.
 
 ## Arquitectura acordada
 
@@ -61,9 +61,12 @@ Fuera de esta subfase quedan los ratios históricos, el Scanner, la Watchlist, e
 
 #### Fase 1B — Contratos de ratios y calidad histórica
 
-- Construir ratios a partir del catálogo y las velas compartidas.
-- Definir ventanas, timezone, disponibilidad de ambas patas y tratamiento de huecos.
-- Exponer consultas reutilizables para el futuro Laboratorio y Scanner.
+Implementación interna completada; todavía no agrega pantallas ni persistencia de ratios.
+
+- Construir `price_ratio` y `log_ratio` a partir de las velas compartidas.
+- Alinear timestamps exactamente y distinguir cobertura completa, parcial y vacía.
+- Rechazar precios no positivos, no finitos, duplicados y series incompatibles.
+- Exponer `build_pair_ratios(...)` para el futuro Laboratorio y Scanner.
 
 #### Fase 1C — Ingesta operativa controlada
 
