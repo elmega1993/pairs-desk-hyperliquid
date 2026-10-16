@@ -70,9 +70,13 @@ Implementación interna completada; todavía no agrega pantallas ni persistencia
 
 #### Fase 1C — Ingesta operativa controlada
 
-- Ejecutar sincronizaciones manuales o programadas fuera del ciclo de renderizado.
-- Medir duración, filas nuevas, huecos, errores y cobertura.
-- Activar caché compartida únicamente después de validar la calidad de los datos.
+Implementación interna completada; la programación residente queda deliberadamente fuera del ciclo de renderizado.
+
+- Ejecutar sincronizaciones manuales o desde un scheduler externo.
+- Reutilizar checkpoints y solicitar solo ventanas nuevas o pendientes con solapamiento seguro.
+- Medir duración, filas recibidas, filas nuevas, huecos, errores y cobertura.
+- Procesar lotes secuencialmente y aislar el error de un instrumento.
+- Reutilizar la caché compartida de Parquet después de validar la calidad de los datos.
 
 ### Fase 2 — Explorador de pares / Scanner
 

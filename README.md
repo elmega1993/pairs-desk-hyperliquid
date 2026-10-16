@@ -45,7 +45,7 @@ La base de mercado está separada de la contabilidad y de la ejecución:
 - `~/.local/share/crypto-pairs-desk/ledger.sqlite3`: fills y funding de la cuenta.
 - `~/.local/share/crypto-pairs-desk/orders.sqlite3`: bitácora de intentos de trading.
 
-La ingesta de velas de Fase 1A es un servicio interno/manual. No se ejecuta al refrescar el dashboard, no modifica `/api/state` y no tiene acceso a las rutas de órdenes. Los módulos de catálogo, calidad, almacenamiento e ingesta se prueban de forma aislada antes de conectarlos a futuras pantallas.
+La ingesta de velas de Fase 1A y la coordinación controlada de Fase 1C son servicios internos/manuales. `MarketSyncService` reutiliza checkpoints, solicita solo ventanas nuevas o pendientes, mide duración, filas nuevas, huecos y errores, y puede procesar varios instrumentos secuencialmente. No se ejecuta al refrescar el dashboard, no modifica `/api/state` y no tiene acceso a las rutas de órdenes. Un scheduler residente queda para una etapa posterior.
 
 La capa de ratios de Fase 1B recibe las dos series canónicas en memoria y expone `build_pair_ratios(...)`. Alinea por timestamps exactos, sin interpolar, y devuelve `price_ratio`, `log_ratio`, cobertura (`complete`, `partial` o `empty`) y errores de calidad. Todavía no persiste ratios ni agrega endpoints o pantallas.
 
