@@ -1,6 +1,6 @@
 from pairs_desk.market_catalog import MarketCatalog
 from pairs_desk.market_quality import normalize_candles
-from pairs_desk.market_scanner import MarketScanner
+from pairs_desk.market_scanner import MarketScanner, bootstrap_catalog_from_settings
 from pairs_desk.market_storage import MarketDataStore
 
 
@@ -50,3 +50,12 @@ def test_scanner_filters_and_marks_missing_market_data(tmp_path):
     assert result.candidates[0].pair_id == 'core:SOL__core:BTC'
     assert result.candidates[0].status == 'no_data'
     assert result.candidates[0].ratio is None
+
+
+def test_bootstrap_imports_configured_pairs_into_empty_catalog(tmp_path):
+    catalog = MarketCatalog(tmp_path / 'market.sqlite3')
+
+    created = bootstrap_catalog_from_settings(catalog, {'pairs': [{'long': 'HYPE', 'short': 'ZEC'}]})
+
+    assert created == 1
+    assert [pair['pair_id'] for pair in catalog.list_pairs(active_only=True)] == ['core:HYPE__core:ZEC']

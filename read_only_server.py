@@ -15,7 +15,7 @@ from pairs_desk.frontend_archive import archive_frontend
 from pairs_desk.metrics import position_map, ratio_bars, liquidation_distance, closed_pair_trade_events, archived_pair_entry_ratio, management_signals
 from pairs_desk.ledger import Ledger, active_funding
 from pairs_desk.market_catalog import MarketCatalog
-from pairs_desk.market_scanner import MarketScanner
+from pairs_desk.market_scanner import MarketScanner, bootstrap_catalog_from_settings
 from pairs_desk.market_storage import MarketDataStore
 from final_read_services import recent_fills, add_accounting, zscore_from_bars, funding_summary
 
@@ -266,8 +266,15 @@ def api_scanner(interval: str = '1h', search: str = '', venue: str = '', limit: 
     if not 1 <= limit <= 100:
         raise HTTPException(400, 'Límite inválido (1-100)')
     try:
-        scanner = MarketScanner(MarketCatalog(MARKET_DB), MarketDataStore(MARKET_DATA))
+        settings, settings_error = load_settings(SETTINGS)
+        if settings_error:
+            raise HTTPException(409, 'Configuración inválida')
+        catalog = MarketCatalog(MARKET_DB)
+        bootstrap_catalog_from_settings(catalog, settings)
+        scanner = MarketScanner(catalog, MarketDataStore(MARKET_DATA))
         return scanner.scan(interval=interval, search=search, venue=venue, limit=limit).to_dict()
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:

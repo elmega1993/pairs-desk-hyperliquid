@@ -47,6 +47,31 @@ class ScannerResult:
         }
 
 
+def bootstrap_catalog_from_settings(catalog: MarketCatalog, settings: dict[str, Any]) -> int:
+    """Seed the public market catalog from configured pair definitions."""
+    created = 0
+    for saved in settings.get('pairs', []) if isinstance(settings, dict) else []:
+        if not isinstance(saved, dict) or not saved.get('long') or not saved.get('short'):
+            continue
+        try:
+            legs = []
+            for value in (saved['long'], saved['short']):
+                raw = str(value).strip()
+                venue, separator, symbol = raw.partition(':')
+                legs.append((symbol if separator else raw, venue if separator else 'core'))
+            for symbol, venue in legs:
+                catalog.upsert_instrument(symbol, venue)
+            catalog.upsert_pair(
+                f'{legs[0][1]}:{legs[0][0]}',
+                f'{legs[1][1]}:{legs[1][0]}',
+                label=f'{saved["long"]}/{saved["short"]}',
+            )
+            created += 1
+        except (KeyError, TypeError, ValueError):
+            continue
+    return created
+
+
 class MarketScanner:
     def __init__(self, catalog: MarketCatalog, store: MarketDataStore, *, now_ms: int | None = None):
         self.catalog = catalog
