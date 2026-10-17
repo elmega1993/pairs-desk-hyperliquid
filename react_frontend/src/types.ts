@@ -10,3 +10,5 @@ export type PairAnalytics={status:string;reason?:string;z_log?:number|null;regim
 export type AnalyticsResponse={as_of_ms:number;pairs:Record<string,PairAnalytics>};
 export type ScannerCandidate={pair_id:string;label:string;long:string;short:string;venue:string;status:string;reason?:string|null;ratio?:number|null;ratio_change_pct?:number|null;matched_rows:number;missing_long:number[];missing_short:number[]};
 export type ScannerResponse={interval:string;candidates:ScannerCandidate[];total:number;as_of_ms:number};
+export type AvailableAsset={instrument_id:string;symbol:string;venue:string;active:boolean};
+export type PairAnalysis={pair_id:string;long_instrument_id:string;short_instrument_id:string;interval:string;lookback_days:number;status:string;source:string;rows:{timestamp_ms:number;price_ratio:number;log_ratio:number}[];matched_rows:number;missing_long:number[];missing_short:number[];sync:{instrument_id:string;status:string;rows_received:number;rows_new:number;covered_from_ms:number|null;covered_to_ms:number|null;gaps:number[];error:string|null}[];error:string|null};

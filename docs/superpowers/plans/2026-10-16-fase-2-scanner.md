@@ -30,6 +30,18 @@
 - [x] Ejecutar tests focalizados GREEN.
 - [x] Commit `feat: add read-only market scanner service`.
 
+### Task 1B: Corrección de modelo — activos y análisis bajo demanda
+
+**Files:**
+- Create: `pairs_desk/market_assets.py`, `pairs_desk/market_pair_analysis.py`
+- Modify: `read_only_server.py`, `react_frontend/src/components/Scanner.tsx`, `react_frontend/src/api.ts`, `react_frontend/src/types.ts`
+- Test: `tests/test_market_assets.py`, `tests/test_market_pair_analysis.py`, `tests/test_market_assets_api.py`
+
+- [x] Enumerar activos actuales desde metadatos Core/XYZ.
+- [x] Permitir selección manual LONG/SHORT.
+- [x] Descargar históricos bajo demanda y calcular ratio con cobertura real.
+- [x] Mantener la fuente de histórico inyectable para futuros proveedores.
+
 ### Task 2: Endpoint read-only
 
 **Files:**

@@ -49,7 +49,7 @@ La ingesta de velas de Fase 1A y la coordinación controlada de Fase 1C son serv
 
 La capa de ratios de Fase 1B recibe las dos series canónicas en memoria y expone `build_pair_ratios(...)`. Alinea por timestamps exactos, sin interpolar, y devuelve `price_ratio`, `log_ratio`, cobertura (`complete`, `partial` o `empty`) y errores de calidad. Todavía no persiste ratios ni agrega endpoints o pantallas.
 
-El Explorador de Fase 2 está disponible en la vista React **Explorador**. Consulta `GET /api/scanner` usando únicamente el catálogo y el caché Parquet local; muestra ratio actual, variación aproximada de 24 horas, cobertura y estado de datos. No descarga datos en la consulta, no modifica `/api/state` y no envía órdenes.
+El Explorador de Fase 2 está disponible en la vista React **Explorador**. Primero consulta los activos disponibles de Core/XYZ mediante metadatos de Hyperliquid; luego permite elegir una pata LONG y otra SHORT y analizar el par bajo demanda. `POST /api/scanner/analyze` descarga las velas faltantes, las guarda en Parquet y devuelve el ratio histórico, cobertura y calidad. No modifica `/api/state` ni envía órdenes.
 
 ## Documentación
 

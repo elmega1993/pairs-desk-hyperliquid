@@ -4,6 +4,7 @@ from fastapi.responses import RedirectResponse
 import json, os, re, time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 import requests
 import pandas as pd
 from fastapi import FastAPI, HTTPException
@@ -15,6 +16,8 @@ from pairs_desk.frontend_archive import archive_frontend
 from pairs_desk.metrics import position_map, ratio_bars, liquidation_distance, closed_pair_trade_events, archived_pair_entry_ratio, management_signals
 from pairs_desk.ledger import Ledger, active_funding
 from pairs_desk.market_catalog import MarketCatalog
+from pairs_desk.market_assets import AssetUniverseService
+from pairs_desk.market_pair_analysis import PairAnalysisService
 from pairs_desk.market_scanner import MarketScanner, bootstrap_catalog_from_settings
 from pairs_desk.market_storage import MarketDataStore
 from final_read_services import recent_fills, add_accounting, zscore_from_bars, funding_summary
@@ -279,6 +282,35 @@ def api_scanner(interval: str = '1h', search: str = '', venue: str = '', limit: 
         raise HTTPException(400, str(exc))
     except Exception as exc:
         raise HTTPException(503, f'No se pudo leer el Scanner: {type(exc).__name__}')
+
+@app.get('/api/scanner/assets')
+def api_scanner_assets(search: str = '', venue: str = ''):
+    clean_search, clean_venue = search.strip().lower(), venue.strip().lower()
+    try:
+        catalog = MarketCatalog(MARKET_DB)
+        assets = AssetUniverseService(lambda request: hl(request), catalog).list_assets()
+        asset_dicts = [asset.to_dict() for asset in assets]
+        filtered = [asset for asset in asset_dicts if (not clean_search or clean_search in asset['symbol'].lower() or clean_search in asset['instrument_id'].lower()) and (not clean_venue or clean_venue == asset['venue'])]
+        return {'assets': filtered, 'total': len(filtered), 'as_of_ms': int(time.time() * 1000)}
+    except Exception as exc:
+        raise HTTPException(503, f'No se pudieron leer los activos: {type(exc).__name__}')
+
+@app.post('/api/scanner/analyze')
+def api_scanner_analyze(payload: dict[str, Any]):
+    interval = str(payload.get('interval') or '1h')
+    if interval not in ('15m', '1h', '4h', '1d'):
+        raise HTTPException(400, 'Intervalo inválido')
+    try:
+        lookback_days = int(payload.get('lookback_days') or 180)
+        long_id = str(payload.get('long_instrument_id') or '').strip()
+        short_id = str(payload.get('short_instrument_id') or '').strip()
+        catalog = MarketCatalog(MARKET_DB)
+        service = PairAnalysisService(catalog, MarketDataStore(MARKET_DATA), lambda **request: hl(request))
+        return service.analyze(long_id, short_id, interval=interval, lookback_days=lookback_days).to_dict()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(503, f'No se pudo analizar el par: {type(exc).__name__}')
 
 @app.get('/api/chart/{pair_id}')
 def chart(pair_id:str,interval:str='1d',before:int|None=None,limit:int=600):

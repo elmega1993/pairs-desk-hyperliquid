@@ -41,3 +41,11 @@ El escritorio operativo seguirá sin cambios. La vista no agregará botones de t
 - Ejecución de órdenes.
 - Descarga de datos dentro de `/api/scanner`.
 - Rediseño del escritorio.
+
+## Corrección de alcance aprobada
+
+El Scanner no debe enumerar pares predefinidos como universo principal. Debe enumerar activos disponibles desde los metadatos actuales de Hyperliquid Core/XYZ y permitir que el usuario elija manualmente las dos patas.
+
+Al confirmar LONG/SHORT, `POST /api/scanner/analyze` solicitará las velas faltantes mediante la fuente primaria de Hyperliquid, las persistirá en Parquet y calculará el ratio histórico. La interfaz mostrará la cobertura real; no interpolará ni inventará historia para activos recientemente listados.
+
+La fuente histórica queda detrás de una dependencia inyectable para poder añadir en el futuro archivos de Hyperliquid u otros proveedores y reconstruir períodos anteriores sin modificar el contrato del Scanner.
