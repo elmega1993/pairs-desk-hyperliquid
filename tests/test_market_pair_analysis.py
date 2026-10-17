@@ -27,4 +27,6 @@ def test_analyze_fetches_selected_assets_and_builds_ratio(tmp_path):
     assert result.pair_id == 'core:HYPE__core:ZEC'
     assert result.matched_rows == 2
     assert result.rows[-1]['price_ratio'] == 1.0
+    assert result.rows[-1]['long_close'] == 20.0
+    assert result.rows[-1]['short_close'] == 20.0
     assert [call['req']['coin'] for call in calls] == ['HYPE', 'ZEC']

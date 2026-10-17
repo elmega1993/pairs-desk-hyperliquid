@@ -72,6 +72,8 @@ class PairAnalysisService:
             rows = tuple(
                 {
                     'timestamp_ms': int(row.timestamp_ms),
+                    'long_close': float(row.long_close),
+                    'short_close': float(row.short_close),
                     'price_ratio': float(row.price_ratio),
                     'log_ratio': float(row.log_ratio),
                 }
