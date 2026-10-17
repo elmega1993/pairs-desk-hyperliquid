@@ -59,6 +59,8 @@ html{overflow-anchor:none;scroll-behavior:auto}
 
 .closed-detail{padding:16px;border-top:1px solid var(--border,#39445a);display:grid;gap:12px}.closed-detail .chart-pro{min-height:380px}.closed-detail>small{display:block;opacity:.75}
 
+.scanner-chart-timeframes{display:flex;align-items:center;gap:4px;margin:8px 0}.scanner-chart-timeframes span{color:#8f9fbd;font-size:10px;margin-right:3px}.scanner-chart-timeframes button{font-size:10px;padding:4px 7px}
+
 /* ===== PNL chart v2: stats strip, source chips, readout, reconciliation ===== */
 .pnl-chart{display:flex;flex-direction:column;gap:8px;min-width:0}
 .pnl-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}

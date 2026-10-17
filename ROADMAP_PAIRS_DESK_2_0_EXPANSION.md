@@ -12,7 +12,7 @@ Convertir Pairs Desk en una plataforma integral para descubrir, investigar, simu
 - El escritorio actual consulta posiciones, precios, velas, analítica básica, riesgo y cierres.
 - Existe SQLite separado para ledger, diario de operaciones y configuraciones, además del catálogo de mercado de Fase 1A.
 - Fase 1A ya dispone de almacén Parquet e ingesta histórica incremental compartida; Fase 1B agrega el contrato interno de ratios.
-- Explorador, Laboratorio y Watchlist tienen presencia parcial o conceptual, pero aún no son módulos funcionales independientes.
+- Explorador ya cuenta con un MVP funcional en React; Laboratorio y la Watchlist persistida en SQLite siguen pendientes como módulos independientes.
 - El backtesting disponible es básico y está limitado a niveles; no equivale todavía a un motor de validación walk-forward.
 - React contiene rutas de operaciones reales. La ejecución debe seguir aislada del catálogo, la investigación, el simulador y el backtesting.
 
@@ -88,6 +88,15 @@ MVP de selección y análisis bajo demanda implementado en React. La generación
 - Identificar coberturas incompletas de activos nuevos sin inventar datos.
 - Mantener una abstracción de fuente para futuras reconstrucciones desde archivos históricos externos.
 - Mantener el escritorio operativo y las rutas de trading sin cambios.
+
+#### Fase 2 — Estado de implementación
+
+- Lista dinámica de activos Core/XYZ con búsqueda, filtro por mercado y scroll interno.
+- Selección independiente de patas LONG y SHORT.
+- Descarga histórica bajo demanda y ratio con timestamps, precios de ambas patas y gráfico interactivo reutilizado del escritorio.
+- Cambio de temporalidad desde el propio bloque del gráfico, sin repetir «Analizar par».
+- Watchlist local del navegador para guardar, cargar y eliminar pares sin abrir órdenes.
+- Pendiente: migrar la Watchlist a persistencia SQLite, agregar notas/tesis y métricas de seguimiento.
 
 ### Fase 3 — Laboratorio estadístico de ratios
 
