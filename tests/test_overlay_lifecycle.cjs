@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+const ts=require(require.resolve('typescript',{paths:[path.join(__dirname,'../react_frontend')]}));
+const code=fs.readFileSync(path.join(__dirname,'../react_frontend/src/overlayLifecycle.ts'),'utf8');
+const compiled=ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+const moduleObject={exports:{}};
+vm.runInNewContext(compiled,{module:moduleObject,exports:moduleObject.exports});
+const {rememberOverlay,clearTrackedOverlays}=moduleObject.exports;
+
+const tracked=new Set();
+rememberOverlay(tracked,'one');
+rememberOverlay(tracked,['two','three']);
+rememberOverlay(tracked,undefined);
+assert.deepEqual([...tracked],['one','two','three']);
+const removed=[];
+clearTrackedOverlays(tracked,id=>removed.push(id));
+assert.deepEqual(removed,['one','two','three']);
+assert.equal(tracked.size,0);
+console.log('OK: chart overlays are tracked and cleared by ID');
