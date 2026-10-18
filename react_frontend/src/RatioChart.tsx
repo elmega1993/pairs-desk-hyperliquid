@@ -2,8 +2,9 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import type {Bar,Pair,AdaptiveLevels} from './types';
 import {ZScorePane} from './ZScorePane';
 import {buildRatioStats} from './ratioStats';
+import {indicatorIsStacked,indicatorPaneConfig,indicatorPaneId} from './indicatorConfig';
 
-type ChartInstance={applyNewData:(bars:unknown[])=>void;createOverlay:(args:unknown)=>void;setPriceVolumePrecision?:(p:number,v:number)=>void;scrollToRealTime?:()=>void;resize?:()=>void;removeOverlay?:(id?:string)=>void;createIndicator?:(name:string,isStack?:boolean,paneId?:string)=>unknown;removeIndicator?:(paneId:string,name?:string)=>void;getOverlays?:()=>unknown[];applyMoreData?:(bars:unknown[])=>void};
+type ChartInstance={applyNewData:(bars:unknown[])=>void;createOverlay:(args:unknown)=>void;setPriceVolumePrecision?:(p:number,v:number)=>void;scrollToRealTime?:()=>void;resize?:()=>void;removeOverlay?:(id?:string)=>void;createIndicator?:(name:string,isStack?:boolean,pane?:{id:string})=>unknown;removeIndicator?:(paneId:string,name?:string)=>void;getOverlays?:()=>unknown[];applyMoreData?:(bars:unknown[])=>void};
 type Engine={init:(host:HTMLElement,options:unknown)=>ChartInstance;dispose:(host:HTMLElement)=>void;registerOverlay:(definition:unknown)=>void};
 declare global {interface Window{klinecharts?:Engine}}
 export type ChartLayers={average:boolean;initial:boolean;targets:boolean;events:boolean};
@@ -66,7 +67,7 @@ export function RatioChart({pair,bars,layers,adaptive,error,interval,onLoadOlder
  // Reinitialize only when selecting a different pair or interval; candles update separately.
  },[pair?.id,interval,Boolean(bars.length)]);
  useEffect(()=>{if(!chart.current||!bars.length)return;try{chart.current.applyNewData(bars.map(b=>({...b,volume:0})));if(pairRef.current&&bars.length){renderLevels(chart.current,pairRef.current,bars,layersRef.current,adaptive);renderStats(chart.current,bars,stats,statLayers)}}catch(e){console.error('Velas',e)}},[bars]);
- useEffect(()=>{if(!chart.current)return;for(const name of ['MA','EMA','BOLL','RSI','MACD']){try{chart.current.removeIndicator?.('candle_pane',name)}catch{}}for(const name of indicators){try{chart.current.createIndicator?.(name,name==='RSI'||name==='MACD')}catch(e){console.warn('Indicador',name,e)}}},[indicators,pair?.id,interval]);
+ useEffect(()=>{if(!chart.current)return;for(const name of ['MA','EMA','BOLL','RSI','MACD']){try{chart.current.removeIndicator?.(indicatorPaneId(name),name)}catch{}}for(const name of indicators){try{chart.current.createIndicator?.(name,indicatorIsStacked(name),indicatorPaneConfig(name))}catch(e){console.warn('Indicador',name,e)}}},[indicators,pair?.id,interval]);
  useEffect(()=>{const k=window.klinecharts,el=host.current;if(!k||!el||!chart.current||!pairRef.current||!bars.length)return; // preserve scroll/zoom on layer or level changes by retaining chart instance
  try{renderLevels(chart.current,pairRef.current,bars,layersRef.current,adaptive);renderStats(chart.current,bars,stats,statLayers)}catch(e){console.error('Error actualizando niveles',e)};
  },[signature,JSON.stringify(layers),JSON.stringify(statLayers),stats]);
