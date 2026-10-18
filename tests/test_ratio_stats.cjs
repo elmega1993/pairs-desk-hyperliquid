@@ -25,4 +25,9 @@ assert.equal(stats.forward?.up,100);
 
 const invalid=buildRatioStats([{timestamp:1,close:0},{timestamp:2,close:NaN}],90,14);
 assert.equal(invalid,null);
+
+const longBars=Array.from({length:220},(_,i)=>({timestamp:i,close:i+1}));
+const longStats=buildRatioStats(longBars,undefined,14);
+assert.equal(longStats.sampleSize,180);
+assert.equal(longStats.forward.sampleSize,166);
 console.log('OK: ratio stats percentiles, z-score and forward outcomes');

@@ -21,7 +21,7 @@ const quantile=(values:number[],q:number)=>{
 };
 const median=(values:number[])=>quantile([...values].sort((a,b)=>a-b),.5);
 
-export function buildRatioStats(bars:RatioBar[],windowSize=90,horizon=14):RatioStats|null{
+export function buildRatioStats(bars:RatioBar[],windowSize=180,horizon=14):RatioStats|null{
   const values=bars.map(bar=>Number(bar.close)).filter(value=>Number.isFinite(value)&&value>0);
   if(values.length<2)return null;
   const sample=values.slice(-Math.max(2,Math.floor(windowSize)));
