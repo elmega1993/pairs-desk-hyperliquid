@@ -26,3 +26,4 @@ settings.*.bak*
 .vscode/
 .idea/
 react_frontend/.build-source-sha256
+.worktrees/
