@@ -37,6 +37,9 @@ class AssetUniverseService:
                 if not isinstance(entry, dict) or entry.get('isDelisted'):
                     continue
                 symbol = str(entry.get('name') or entry.get('coin') or '').strip().upper()
+                prefix = f'{venue}:'
+                if symbol.startswith(prefix.upper()):
+                    symbol = symbol[len(prefix):].strip()
                 if not symbol:
                     continue
                 ident = instrument_id(symbol, venue)
