@@ -30,6 +30,9 @@ def test_preview_happens_without_real_order(tmp_path):
     data=r.json()
     assert len(data['orders'])==2 and all(o['reduce_only'] for o in data['orders'])
     assert data['total_usd']==12.5
+    assert data['projection']['long']['projected_size']==1.5
+    assert data['projection']['short']['projected_size']==2.25
+    assert data['projection']['pair']['projected_ratio'] is not None
     assert data['ticket_id'] in t._TICKETS
     with patch.object(t,'_ARMED',True):
         assert client.post('/api/trade/execute',headers=ORIGIN,json={'csrf':t._TOK,'ticket_id':data['ticket_id'],'confirmation':'NO'}).status_code==400

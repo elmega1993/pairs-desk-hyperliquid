@@ -1,5 +1,5 @@
 import pytest
-from pairs_desk.trading import preview_pair, _rounded_size, _check_response
+from pairs_desk.trading import preview_pair, project_pair_action, _rounded_size, _check_response
 
 X = {'long':'LINK','short':'PYTH','long_position':{'szi':'10'},'short_position':{'szi':'-200'},'long_mark':20.,'short_mark':1.}
 
@@ -14,6 +14,25 @@ def test_preview(action, expected_buy, reduce):
 def test_bad_input():
     with pytest.raises(ValueError): preview_pair(X,'Cerrar',.5)
     with pytest.raises(ValueError): preview_pair(X,'Aumentar',0)
+
+def test_project_add_uses_weighted_average_and_slippage():
+    x={'long':'LINK','short':'PYTH','long_position':{'szi':'10','entryPx':'100'},'short_position':{'szi':'-20','entryPx':'50'},'long_mark':100.,'short_mark':50.}
+    projection=project_pair_action(x,'Aumentar',.25,.01)
+    assert projection['long']['projected_size']==pytest.approx(12.5)
+    assert projection['short']['projected_size']==pytest.approx(25)
+    assert projection['long']['estimated_fill_px']==pytest.approx(101)
+    assert projection['short']['estimated_fill_px']==pytest.approx(49.5)
+    assert projection['long']['projected_avg_px']==pytest.approx(100.2)
+    assert projection['short']['projected_avg_px']==pytest.approx(49.9)
+    assert projection['pair']['projected_ratio']==pytest.approx(100.2/49.9)
+
+def test_project_reduce_keeps_average_and_reduces_size():
+    x={'long':'LINK','short':'PYTH','long_position':{'szi':'10','entryPx':'100'},'short_position':{'szi':'-20','entryPx':'50'},'long_mark':100.,'short_mark':50.}
+    projection=project_pair_action(x,'Reducir',.25,.01)
+    assert projection['long']['projected_size']==pytest.approx(7.5)
+    assert projection['short']['projected_size']==pytest.approx(15)
+    assert projection['long']['projected_avg_px']==pytest.approx(100)
+    assert projection['short']['projected_avg_px']==pytest.approx(50)
 
 def test_round_down():
     assert _rounded_size(1.23999,2)==1.23

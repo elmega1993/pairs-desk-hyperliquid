@@ -7,7 +7,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from pairs_desk.agent_vault import load_agent
-from pairs_desk.trading import preview_pair, execute_pair, verify_agent
+from pairs_desk.trading import preview_pair, project_pair_action, execute_pair, verify_agent
 from pairs_desk.trade_journal import connect, begin, finish, pending
 from pairs_desk.metrics import position_map
 
@@ -195,13 +195,15 @@ def preview(request: Request,data: PreviewInput):
             if pending(conn,address):raise HTTPException(409,'Hay operaciones pendientes de conciliar')
         finally:conn.close()
         x=_current_pair(cfg,address,hl,data.pair_id)
-        try:orders=preview_pair(x,data.operation,data.fraction_pct/100)
+        try:
+            orders=preview_pair(x,data.operation,data.fraction_pct/100)
+            projection=project_pair_action(x,data.operation,data.fraction_pct/100,data.slippage_pct/100)
         except ValueError as exc:raise HTTPException(400,str(exc))
         ticket_id=secrets.token_urlsafe(32)
         _TICKETS.clear()
         _TICKETS[ticket_id]={'account':address,'pair':data.pair_id,'operation':data.operation,'orders':orders,'slippage':data.slippage_pct/100,'created':time.monotonic()}
     clean=[{'coin':o['coin'],'order':'Comprar' if o['is_buy'] else 'Vender','reduce_only':o['reduce_only'],'size':o['size'],'usd':round(o['notional'],2)} for o in orders]
-    return {'ticket_id':ticket_id,'expires_in_s':_MAX_TICKET_AGE,'orders':clean,'total_usd':round(sum(o['notional'] for o in orders),2),'warning':'Las dos patas no son atómicas. Confirmar en Hyperliquid ante una respuesta incierta.'}
+    return {'ticket_id':ticket_id,'expires_in_s':_MAX_TICKET_AGE,'orders':clean,'total_usd':round(sum(o['notional'] for o in orders),2),'projection':projection,'warning':'Las dos patas no son atómicas. Confirmar en Hyperliquid ante una respuesta incierta.'}
 
 @router.post('/execute')
 def execute(request: Request,data: ExecuteInput):

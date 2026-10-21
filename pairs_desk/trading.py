@@ -27,6 +27,49 @@ def preview_pair(x: dict, action: str, fraction: float) -> list[dict]:
     return result
 
 
+def project_pair_action(x: dict, action: str, fraction: float, slippage: float = 0.0) -> dict:
+    """Estimate post-action averages from fresh marks without submitting orders."""
+    if not 0 <= slippage <= 0.02:
+        raise ValueError('Slippage fuera del límite (0–2%)')
+    orders = preview_pair(x, action, fraction)
+    projections = {}
+    for order, position_key, name in zip(orders, ('long_position', 'short_position'), ('long', 'short')):
+        position = x[position_key]
+        old_size = abs(float(position.get('szi') or 0))
+        mark = float(order['mark'])
+        entry = float(position.get('entryPx') or mark)
+        if not math.isfinite(entry) or entry <= 0:
+            entry = mark
+        estimated_fill = mark * (1 + slippage if order['is_buy'] else 1 - slippage)
+        if action == 'Aumentar':
+            projected_size = old_size + order['size']
+            projected_avg = ((old_size * entry) + (order['size'] * estimated_fill)) / projected_size
+        else:
+            projected_size = max(0.0, old_size - order['size'])
+            projected_avg = entry if projected_size else None
+        projections[name] = {
+            'coin': order['coin'],
+            'current_size': old_size,
+            'projected_size': projected_size,
+            'current_avg_px': entry,
+            'estimated_fill_px': estimated_fill,
+            'projected_avg_px': projected_avg,
+            'current_notional': old_size * mark,
+            'projected_notional': projected_size * mark,
+        }
+    long, short = projections['long'], projections['short']
+    return {
+        'long': long,
+        'short': short,
+        'pair': {
+            'current_ratio': long['current_avg_px'] / short['current_avg_px'],
+            'projected_ratio': None if not long['projected_avg_px'] or not short['projected_avg_px'] else long['projected_avg_px'] / short['projected_avg_px'],
+            'current_exposure': long['current_notional'] + short['current_notional'],
+            'projected_exposure': long['projected_notional'] + short['projected_notional'],
+        },
+    }
+
+
 def _rounded_size(size: float, decimals: int) -> float:
     quantum = Decimal(1).scaleb(-decimals)
     return float(Decimal(str(size)).quantize(quantum, rounding=ROUND_DOWN))
