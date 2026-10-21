@@ -103,6 +103,17 @@ export function drawdownSeries(rows:PnlPoint[]):DrawdownSeries{
  return result;
 }
 
+export function drawdownDomain(rows:PnlPoint[]):{low:number;high:number}{
+ const min=Math.min(0,...drawdownSeries(rows).map(row=>row.drawdown));
+ return {low:min-Math.max(Math.abs(min)*.08,1),high:0};
+}
+
+export function historicalComponent(row:PnlPoint,field:'realized'|'unrealized',index:number,lastIndex:number,current:number|null|undefined):number|null{
+ const point=row[field];
+ if(point!=null&&Number.isFinite(Number(point)))return Number(point);
+ return index===lastIndex&&current!=null&&Number.isFinite(Number(current))?Number(current):null;
+}
+
 const EVENT_LABELS:Record<string,string>={open:'apertura',opened:'apertura',add:'ADD',reduce:'reducción',red:'reducción',close:'cierre',closed:'cierre'};
 export function groupPnlEvents(events:PnlEvent[],spacingMs=2*60*60*1000):PnlEventGroup[]{
  const clean=events.filter(e=>Number.isFinite(Number(e.time))).map(e=>({...e,time:Number(e.time)<1e11?Number(e.time)*1000:Number(e.time)})).sort((a,b)=>a.time-b.time);
