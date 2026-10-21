@@ -1,6 +1,8 @@
 /** Pure PNL series logic (no imports, so it can be unit-tested in Node). */
-export type PnlPoint={time:number;pnl:number;basis?:string};
+export type PnlPoint={time:number;pnl:number;basis?:string;realized?:number|null;unrealized?:number|null;exposure?:number|null;marginUsed?:number|null};
 export type SeriesBreak={kind:'gap'|'basis';from:number;time:number;fromPnl:number;pnl:number};
+export type PnlEvent={time:number;kind?:string;pair?:string;status?:string};
+export type PnlEventGroup={time:number;label:string;count:number;items:PnlEvent[]};
 
 export function normalizePnlHistory(rows:PnlPoint[]):PnlPoint[]{
  return rows.filter(r=>Number.isFinite(r.time)&&Number.isFinite(r.pnl)).map(r=>({...r,time:r.time<1e11?r.time*1000:r.time})).sort((a,b)=>a.time-b.time).filter((r,i,a)=>i===a.length-1||r.time!==a[i+1].time);
@@ -73,4 +75,48 @@ export function pnlStats(rows:PnlPoint[]):PnlStats|null{
  }
  const last=run[run.length-1];
  return {first:run[0].pnl,last:last.pnl,delta:last.pnl-run[0].pnl,max,min,fromPeak:last.pnl-max.pnl,maxDrawdown:maxDD,mixedBasis:start>0,startTime:run[0].time};
+}
+
+type DrawdownPoint=PnlPoint&{peak:number;drawdown:number};
+type DrawdownSeries=DrawdownPoint[]&{summary:{max:number;current:number;currentDuration:number;recoveryMs:number|null}};
+export function drawdownSeries(rows:PnlPoint[]):DrawdownSeries{
+ if(!rows.length){const empty=[] as DrawdownSeries;empty.summary={max:0,current:0,currentDuration:0,recoveryMs:null};return empty}
+ const out:Array<PnlPoint&{peak:number;drawdown:number}>=[];
+ let peak=-Infinity,peakTime=rows[0].time,max=0,recoveryMs:null|number=null;
+ let priorDrawdown=false,priorPeakTime=rows[0].time;
+ rows.forEach((row,index)=>{
+  const basisChanged=index>0&&row.basis&&rows[index-1].basis&&row.basis!==rows[index-1].basis;
+  if(basisChanged){peak=-Infinity;priorDrawdown=false;recoveryMs=null}
+  if(index===0||row.pnl>peak){
+   if(index>0&&priorDrawdown)recoveryMs=row.time-priorPeakTime;
+   peak=row.pnl;peakTime=row.time;priorPeakTime=peakTime;priorDrawdown=false;
+  }
+  const drawdown=row.pnl-peak;
+  if(drawdown<0)priorDrawdown=true;
+  else if(drawdown===0&&priorDrawdown)recoveryMs=row.time-priorPeakTime;
+  if(drawdown<max)max=drawdown;
+  out.push({...row,peak,drawdown});
+ });
+ const last=out[out.length-1];
+ const result=out as DrawdownSeries;
+ result.summary={max,current:last.drawdown,currentDuration:last.drawdown<0?last.time-peakTime:0,recoveryMs:last.drawdown===0?recoveryMs:null};
+ return result;
+}
+
+const EVENT_LABELS:Record<string,string>={open:'apertura',opened:'apertura',add:'ADD',reduce:'reducción',red:'reducción',close:'cierre',closed:'cierre'};
+export function groupPnlEvents(events:PnlEvent[],spacingMs=2*60*60*1000):PnlEventGroup[]{
+ const clean=events.filter(e=>Number.isFinite(Number(e.time))).map(e=>({...e,time:Number(e.time)<1e11?Number(e.time)*1000:Number(e.time)})).sort((a,b)=>a.time-b.time);
+ const groups:PnlEventGroup[]=[];
+ for(const event of clean){
+  const last=groups.at(-1);
+  if(last&&event.time-last.time<=spacingMs){last.items.push(event);last.count++;last.time=Math.round((last.time+event.time)/2);continue}
+  groups.push({time:event.time,label:'',count:1,items:[event]});
+ }
+ for(const group of groups){
+  const pairs=Array.from(new Set(group.items.map(e=>e.pair).filter(Boolean))) as string[];
+  const pair=pairs.length===1?pairs[0]:pairs.length>1?`${pairs.length} pares`:undefined;
+  const kinds=Array.from(new Set(group.items.map(e=>EVENT_LABELS[String(e.kind||e.status||'evento').toLowerCase()]||String(e.kind||e.status||'evento'))));
+  group.label=(pair?pair+' · ':'')+kinds.join(' + ');
+ }
+ return groups;
 }

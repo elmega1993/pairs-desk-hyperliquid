@@ -8,7 +8,7 @@ function load(name){
   const out=ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
   const m={exports:{}};vm.runInNewContext(out,{module:m,exports:m.exports,Math,Number,Object,Array,Infinity,Map});return m.exports;
 }
-const {normalizePnlHistory,gapThreshold,toSegments,runningPeaks,pnlStats,gapTotal,includeZero,pickPnlSeries}=load('pnlModel.ts');
+const {normalizePnlHistory,gapThreshold,toSegments,runningPeaks,pnlStats,gapTotal,includeZero,pickPnlSeries,drawdownSeries,groupPnlEvents}=load('pnlModel.ts');
 const {reconcile}=load('reconcile.ts');
 const {buildAttention,statusMeta}=load('attention.ts');
 const MIN=60000;
@@ -36,6 +36,14 @@ assert.equal(s.mixedBasis,true);assert.equal(s.first,100);assert.equal(s.max.pnl
 assert.equal(s.last,94);assert.equal(s.fromPeak,-10);assert.equal(s.delta,-6);
 s=pnlStats([{time:1,pnl:0},{time:2,pnl:10},{time:3,pnl:4},{time:4,pnl:12},{time:5,pnl:6}]);
 assert.equal(s.mixedBasis,false);assert.equal(s.maxDrawdown,-6);assert.equal(s.fromPeak,-6);assert.equal(pnlStats([]),null);
+const d=drawdownSeries([{time:1,pnl:0},{time:2,pnl:10},{time:3,pnl:4},{time:4,pnl:12},{time:5,pnl:6}]);
+assert.equal(d.summary.max,-6);assert.equal(d.summary.current,-6);assert.equal(d.summary.currentDuration,1);assert.equal(d.summary.recoveryMs,null);
+assert.deepEqual(Array.from(drawdownSeries([{time:1,pnl:0},{time:2,pnl:10},{time:3,pnl:4},{time:4,pnl:12},{time:5,pnl:6}]),x=>x.drawdown),[0,0,-6,0,-6]);
+assert.equal(drawdownSeries([{time:1,pnl:0},{time:2,pnl:10},{time:3,pnl:4},{time:4,pnl:10}]).summary.recoveryMs,2);
+assert.equal(drawdownSeries([{time:1,pnl:100,basis:'gross'},{time:2,pnl:10,basis:'net'}])[1].drawdown,0);
+const eventGroups=groupPnlEvents([{time:1e12,kind:'open',pair:'A/B'},{time:1e12+100,kind:'add',pair:'A/B'},{time:1e12+10000,kind:'close',pair:'C/D'}],2000);
+assert.equal(eventGroups.length,2);assert.equal(eventGroups[0].count,2);assert.equal(eventGroups[0].label,'A/B · apertura + ADD');assert.equal(eventGroups[1].label,'C/D · cierre');
+assert.equal(groupPnlEvents([{time:1e12,kind:'open',pair:'A/B'},{time:1e12+100,kind:'open',pair:'C/D'}],2000)[0].label,'2 pares · apertura');
 // picos reiniciados en cambio de base
 assert.deepEqual(Array.from(runningPeaks([{time:1,pnl:50,basis:'gross'},{time:2,pnl:10,basis:'net'},{time:3,pnl:20,basis:'net'}])),[50,10,20]);
 // normalización: segundos→ms, orden y duplicados; conserva basis

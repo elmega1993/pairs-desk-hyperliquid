@@ -111,7 +111,12 @@ def local_pnl_history():
         for line in SNAPSHOTS.read_text(encoding='utf-8').splitlines():
             row=json.loads(line)
             if isinstance(row,dict) and row.get('time') and row.get('pnl') is not None:
-                rows.append({'time':int(row['time']),'pnl':float(row['pnl']),'source':'local','basis':row.get('basis','legacy')})
+                item={'time':int(row['time']),'pnl':float(row['pnl']),'source':'local','basis':row.get('basis','legacy')}
+                for key in ('open','realized','exposure','margin_used','margin_pct'):
+                    if row.get(key) is not None:
+                        try:item[key]=float(row[key])
+                        except (TypeError,ValueError):pass
+                rows.append(item)
     except (OSError,TypeError,ValueError,json.JSONDecodeError):
         return []
     return sorted({r['time']:r for r in rows}.values(),key=lambda r:r['time'])
@@ -125,7 +130,7 @@ def save_snapshot(summary):
         SNAPSHOTS.parent.mkdir(parents=True,exist_ok=True)
         previous=local_pnl_history()
         if previous and now-previous[-1]['time']<60_000: return
-        row={'basis':'net' if summary.get('total') is not None else 'gross','time':now,'pnl':float(pnl),'open':summary.get('unrealized'),'realized':summary.get('realized'),'funding':summary.get('funding'),'fees':summary.get('fees'),'equity':summary.get('equity_core')}
+        row={'basis':'net' if summary.get('total') is not None else 'gross','time':now,'pnl':float(pnl),'open':summary.get('unrealized'),'realized':summary.get('realized'),'funding':summary.get('funding'),'fees':summary.get('fees'),'equity':summary.get('equity_core'),'exposure':summary.get('exposure'),'margin_used':summary.get('margin_used'),'margin_pct':summary.get('margin_pct')}
         with SNAPSHOTS.open('a',encoding='utf-8') as handle:
             handle.write(json.dumps(row,separators=(',',':'))+'\n')
     except (OSError,TypeError,ValueError):

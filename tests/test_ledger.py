@@ -186,3 +186,14 @@ def test_chart_retains_history_and_identifies_accounting_basis(tmp_path, monkeyp
     assert server.local_pnl_history()[0]['basis']=='gross'
     server.save_snapshot({'total':None,'open_plus_realized':2000})
     assert json.loads(path.read_text().splitlines()[-1])['basis']=='gross'
+
+
+def test_chart_history_retains_snapshot_components_for_context(tmp_path, monkeypatch):
+    import json
+    import read_only_server as server
+    path=tmp_path/'history.jsonl'
+    path.write_text(json.dumps({'time':1,'pnl':12,'basis':'net','open':4,'realized':8,'exposure':1000,'margin_used':120,'margin_pct':12})+'\n')
+    monkeypatch.setattr(server,'SNAPSHOTS',path)
+    row=server.local_pnl_history()[0]
+    assert row['open']==4 and row['realized']==8 and row['exposure']==1000
+    assert row['margin_used']==120 and row['margin_pct']==12

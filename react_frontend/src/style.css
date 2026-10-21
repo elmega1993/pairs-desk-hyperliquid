@@ -66,12 +66,21 @@ html{overflow-anchor:none;scroll-behavior:auto}
 .pnl-chart{display:flex;flex-direction:column;gap:8px;min-width:0}
 .pnl-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .pnl-stats>div{background:#0f1a2e;border:1px solid #223250;border-radius:8px;padding:7px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.pnl-stats-rich{grid-template-columns:repeat(6,minmax(0,1fr))}
 .pnl-stats small{font-size:10px;letter-spacing:.08em;color:#9bacc9}
 .pnl-stats b{font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnl-stats em{font-size:10px;color:#8f9fbd;font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnl-chart-options{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-height:26px}
+.pnl-chart-options>button{flex:none;border:1px solid #334365;border-radius:6px;background:#14223b;color:#c3d0e6;font-size:11px;padding:5px 8px}
+.pnl-chart-options>button.active{background:#352858;border-color:#8b6bda;color:#fff}
 .pnl-chips{display:flex;flex-wrap:wrap;gap:6px}
 .pnl-chip{font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid #2f4266;color:#b4c3de;background:#142039}
 .pnl-chip.ok{border-color:#1f6b5c;color:#7fe9d2}.pnl-chip.warn{border-color:#8a6a2f;color:#ffd596;background:#2c2618}.pnl-chip.muted{color:#93a4c3}
 .pnl-plot svg:focus-visible{outline:2px solid #ad94ff;outline-offset:2px;border-radius:6px}
+.pnl-plot{height:340px;background:#000;border:1px solid #263650;border-radius:7px;padding:0;position:relative}
+.pnl-tooltip{position:absolute;top:12px;z-index:2;display:flex;flex-direction:column;gap:4px;min-width:220px;padding:9px 11px;border:1px solid #3c5076;border-radius:7px;background:#0d1729eF;box-shadow:0 8px 24px #0008;pointer-events:none;font-size:11px;color:#c5d3eb}
+.pnl-tooltip>b{color:#f0f4ff;font-size:12px;margin-bottom:2px}.pnl-tooltip span{display:flex;justify-content:space-between;gap:15px}.pnl-tooltip strong{font-variant-numeric:tabular-nums;color:#e7eeff}.pnl-tooltip-event{color:#bdaeff!important;border-top:1px solid #3b3261;padding-top:4px}
+.pnl-legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap;color:#9eacc8;font-size:10px;padding:2px 4px 0}.pnl-legend span{display:inline-flex;align-items:center;gap:5px}.legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%}.pnl-dot{background:#2ed8b5}.dd-dot{background:#ff6c8c}.event-dot{background:#a88cff}.legend-gap{display:inline-block;width:12px;height:3px;border-radius:2px;background:#8fa3c7}
 .pnl-readout{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;min-height:22px;font-size:12px;font-variant-numeric:tabular-nums;color:#c9d6ed}
 .pnl-readout .muted{color:#8f9fbd}
 .pnl-readout .positive{color:#2ed8b5}.pnl-readout .negative{color:#ff6c8c}
@@ -82,7 +91,8 @@ html{overflow-anchor:none;scroll-behavior:auto}
 .pnl-recon-total{margin-left:auto}
 .pnl-recon-note{margin:6px 0 0;padding:6px 9px;border-radius:6px;background:#322b25;border:1px solid #765b37;color:#ffdba4}
 .pnl-recon[data-status=ok] .pnl-recon-total b{color:#2ed8b5}
-@media(max-width:760px){.pnl-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.pnl-recon-total{margin-left:0}}
+@media(max-width:1250px){.pnl-stats-rich{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.pnl-stats,.pnl-stats-rich{grid-template-columns:repeat(2,minmax(0,1fr))}.pnl-recon-total{margin-left:0}.pnl-plot{height:315px}.pnl-tooltip{min-width:190px;max-width:calc(100% - 20px);font-size:10px}}
 
 /* ===== Attention queue, freshness, trade badge, margin KPI ===== */
 .attention{margin-bottom:10px}
@@ -107,6 +117,8 @@ html{overflow-anchor:none;scroll-behavior:auto}
 @media(max-width:1250px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis .kpi:last-child{grid-column:1/-1}}
 header>div:last-child{display:flex;align-items:center;flex-wrap:wrap;gap:6px 0;justify-content:flex-end}
 .pnl-controls select{min-height:30px}
+.bottom .pnl-plot{height:340px;background:#000}
+@media(max-width:760px){.bottom .pnl-plot{height:315px}}
 .position small,.metrics small{font-size:10.5px}
 @media(max-width:760px){header{flex-direction:column;align-items:stretch}header>div:last-child{justify-content:flex-start;gap:8px}.trade-badge{margin-right:0}.fresh{margin-right:0}}
 
