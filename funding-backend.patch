@@ -1,0 +1,215 @@
+diff --git a/pairs_desk/funding_carry.py b/pairs_desk/funding_carry.py
+new file mode 100644
+index 0000000..14d5ed1
+--- /dev/null
++++ b/pairs_desk/funding_carry.py
+@@ -0,0 +1,80 @@
++"""Funding estimado de un par con las tasas vigentes de Hyperliquid.
++
++Solo lectura y sin red: recibe la respuesta de ``metaAndAssetCtxs`` y los nominales
++de cada pata. El resultado es un *estimado* con la tasa actual (cambia cada hora);
++no reemplaza al funding realizado del ledger.
++
++Convención de Hyperliquid: ``funding`` es la tasa por hora y, si es positiva, los
++largos pagan a los cortos. Flujo por hora de un par = -tasa_long*nominal_long +
++tasa_short*nominal_short (positivo = el par cobra).
++"""
++from __future__ import annotations
++
++import math
++from typing import Any
++
++HOURS_PER_DAY = 24
++DAYS_PER_YEAR = 365
++BASIS = 'estimado_tasa_actual'
++
++
++def _finite(value: Any) -> float | None:
++    try:
++        number = float(value)
++    except (TypeError, ValueError):
++        return None
++    return number if math.isfinite(number) else None
++
++
++def funding_rates(payload: Any) -> dict[str, float]:
++    """Convierte ``[meta, assetCtxs]`` en ``{coin: tasa_por_hora}``.
++
++    Ignora activos delistados, entradas sin tasa finita y respuestas con otro formato.
++    """
++    if not isinstance(payload, (list, tuple)) or len(payload) < 2:
++        return {}
++    meta, contexts = payload[0], payload[1]
++    universe = meta.get('universe') if isinstance(meta, dict) else None
++    if not isinstance(universe, list) or not isinstance(contexts, list):
++        return {}
++    rates: dict[str, float] = {}
++    for asset, ctx in zip(universe, contexts):
++        if not isinstance(asset, dict) or not isinstance(ctx, dict) or asset.get('isDelisted'):
++            continue
++        name, rate = asset.get('name'), _finite(ctx.get('funding'))
++        if isinstance(name, str) and name and rate is not None:
++            rates[name] = rate
++    return rates
++
++
++def _lookup(rates: dict[str, float], coin: str) -> float | None:
++    if coin in rates:
++        return rates[coin]
++    bare = coin.split(':', 1)[1] if ':' in coin else coin
++    return rates.get(bare)
++
++
++def _unavailable(reason: str) -> dict[str, Any]:
++    return {'funding_per_day_usd': None, 'funding_apr_pct': None, 'funding_long_rate_pct_h': None,
++            'funding_short_rate_pct_h': None, 'funding_basis': BASIS, 'funding_reason': reason}
++
++
++def pair_funding_carry(long_coin: str, short_coin: str, long_usd: Any, short_usd: Any,
++                       rates: dict[str, float] | None) -> dict[str, Any]:
++    """Funding estimado por día (USD) y anualizado (% del nominal medio) para un par."""
++    if not rates:
++        return _unavailable('Tasas de funding no disponibles')
++    long_notional, short_notional = _finite(long_usd), _finite(short_usd)
++    if long_notional is None or short_notional is None or long_notional < 0 or short_notional < 0:
++        return _unavailable('Nominales del par no verificables')
++    long_rate, short_rate = _lookup(rates, long_coin), _lookup(rates, short_coin)
++    missing = [c for c, r in ((long_coin, long_rate), (short_coin, short_rate)) if r is None]
++    if missing:
++        return _unavailable('Sin tasa de funding para ' + ', '.join(missing))
++    per_hour = -long_rate * long_notional + short_rate * short_notional
++    per_day = per_hour * HOURS_PER_DAY
++    average_notional = (long_notional + short_notional) / 2
++    apr = per_day * DAYS_PER_YEAR / average_notional * 100 if average_notional > 0 else None
++    return {'funding_per_day_usd': per_day, 'funding_apr_pct': apr,
++            'funding_long_rate_pct_h': long_rate * 100, 'funding_short_rate_pct_h': short_rate * 100,
++            'funding_basis': BASIS, 'funding_reason': 'Estimado con la tasa vigente; cambia cada hora'}
+diff --git a/read_only_server.py b/read_only_server.py
+index 7fa5270..0c7f597 100644
+--- a/read_only_server.py
++++ b/read_only_server.py
+@@ -15,6 +15,7 @@ from pairs_desk.storage import load_settings
+ from pairs_desk.frontend_archive import archive_frontend
+ from pairs_desk.metrics import position_map, ratio_bars, liquidation_distance, closed_pair_trade_events, archived_pair_entry_ratio, management_signals
+ from pairs_desk.ledger import Ledger, active_funding
++from pairs_desk.funding_carry import funding_rates, pair_funding_carry
+ from pairs_desk.market_catalog import MarketCatalog
+ from pairs_desk.market_assets import AssetUniverseService
+ from pairs_desk.market_pair_analysis import PairAnalysisService
+@@ -422,10 +423,17 @@ def _analytic_for_pair(pair, now_ms):
+             'horizon_days':horizon,'health':health,'age_days':age,'age_vs_half_life':age_ratio,
+             'risk_usd_per_sigma_day':risk_day,'risk_usd_per_sigma_h':risk_h,
+             'liq_distance_pct':pair.get('liq'),'imbalance_pct':pair.get('imbalance'),
+-            'funding_per_day_usd':None,'funding_reason':'Ledger de 7 días no verificado',
+             'pair_status':status,'pair_status_reason':reason,'hit_rates':hit,
+             'levels_v3':levels,**{k:v for k,v in mae.items() if k in ('mae_pct','mfe_pct','mae_usd','mfe_usd')}}
+ 
++def _current_funding_rates():
++    """Tasas de funding vigentes (core + xyz). Si una consulta falla, se omite sin romper la analítica."""
++    rates={}
++    for payload in ({'type':'metaAndAssetCtxs'},{'type':'metaAndAssetCtxs','dex':'xyz'}):
++        try:rates.update(funding_rates(hl(payload)))
++        except Exception:pass
++    return rates
++
+ @app.get('/api/analytics')
+ def api_analytics():
+     """Read-only batch endpoint. Never calls states(), which archives/snapshots."""
+@@ -454,9 +462,13 @@ def api_analytics():
+                       'pnl':safe_number(lp.get('unrealizedPnl'))+safe_number(sp.get('unrealizedPnl')),
+                       'opened_at':saved.get('opened_at')})
+     now_ms=int(time.time()*1000)
++    rates=_current_funding_rates()
+     def compute(pair):
+-        try:return pair['id'],_analytic_for_pair(pair,now_ms)
+-        except Exception as exc:return pair['id'],{'status':'unavailable','reason':'Error analítico: '+type(exc).__name__,'pair_status':'SIN_DATOS'}
++        try:result=_analytic_for_pair(pair,now_ms)
++        except Exception as exc:result={'status':'unavailable','reason':'Error analítico: '+type(exc).__name__,'pair_status':'SIN_DATOS'}
++        long_coin,short_coin=pair['id'].split('|',1)
++        result.update(pair_funding_carry(long_coin,short_coin,pair.get('long_usd'),pair.get('short_usd'),rates))
++        return pair['id'],result
+     with ThreadPoolExecutor(max_workers=3) as pool: results=dict(pool.map(compute,pairs))
+     return {'as_of_ms':now_ms,'pairs':results}
+ 
+diff --git a/tests/test_funding_carry.py b/tests/test_funding_carry.py
+new file mode 100644
+index 0000000..6d18ce4
+--- /dev/null
++++ b/tests/test_funding_carry.py
+@@ -0,0 +1,76 @@
++import pytest
++
++import read_only_server as server
++from pairs_desk.funding_carry import funding_rates, pair_funding_carry
++
++PAYLOAD = [
++    {'universe': [{'name': 'BTC'}, {'name': 'ETH'}, {'name': 'OLD', 'isDelisted': True}, {'name': 'BAD'}]},
++    [{'funding': '0.0000125'}, {'funding': '-0.00002'}, {'funding': '0.01'}, {'funding': 'nan'}],
++]
++
++
++def test_rates_skip_delisted_and_non_finite():
++    assert funding_rates(PAYLOAD) == {'BTC': 0.0000125, 'ETH': -0.00002}
++
++
++@pytest.mark.parametrize('payload', [None, [], [{}, []], [{'universe': []}, None], 'x'])
++def test_rates_tolerate_unexpected_shapes(payload):
++    assert funding_rates(payload) == {}
++
++
++def test_long_pays_positive_rate_and_short_receives_it():
++    # Long BTC (tasa +) paga; short ETH (tasa -) también paga: ambos restan.
++    out = pair_funding_carry('BTC', 'ETH', 1000, 1000, {'BTC': 0.0000125, 'ETH': -0.00002})
++    per_hour = -0.0000125 * 1000 + -0.00002 * 1000
++    assert out['funding_per_day_usd'] == pytest.approx(per_hour * 24)
++    assert out['funding_per_day_usd'] < 0
++    assert out['funding_apr_pct'] == pytest.approx(per_hour * 24 * 365 / 1000 * 100)
++    assert out['funding_long_rate_pct_h'] == pytest.approx(0.00125)
++    assert out['funding_short_rate_pct_h'] == pytest.approx(-0.002)
++    assert out['funding_basis'] == 'estimado_tasa_actual'
++
++
++def test_pair_collects_when_short_leg_has_higher_rate():
++    out = pair_funding_carry('ETH', 'BTC', 1000, 1200, {'ETH': 0.00001, 'BTC': 0.00003})
++    assert out['funding_per_day_usd'] == pytest.approx((-0.00001 * 1000 + 0.00003 * 1200) * 24)
++    assert out['funding_per_day_usd'] > 0
++
++
++def test_xyz_coin_resolves_with_or_without_prefix():
++    with_prefix = pair_funding_carry('xyz:TSLA', 'BTC', 500, 500, {'xyz:TSLA': 0.00001, 'BTC': 0.0})
++    bare = pair_funding_carry('xyz:TSLA', 'BTC', 500, 500, {'TSLA': 0.00001, 'BTC': 0.0})
++    assert with_prefix['funding_per_day_usd'] == pytest.approx(bare['funding_per_day_usd'])
++
++
++@pytest.mark.parametrize('args', [
++    ('BTC', 'ETH', 1000, 1000, {}),
++    ('BTC', 'ETH', 1000, 1000, None),
++    ('BTC', 'ZZZ', 1000, 1000, {'BTC': 0.00001}),
++    ('BTC', 'ETH', None, 1000, {'BTC': 0.00001, 'ETH': 0.00001}),
++    ('BTC', 'ETH', float('nan'), 1000, {'BTC': 0.00001, 'ETH': 0.00001}),
++    ('BTC', 'ETH', -5, 1000, {'BTC': 0.00001, 'ETH': 0.00001}),
++])
++def test_unverifiable_inputs_give_none_never_zero(args):
++    out = pair_funding_carry(*args)
++    assert out['funding_per_day_usd'] is None and out['funding_apr_pct'] is None
++    assert out['funding_reason']
++
++
++def test_missing_leg_is_named_in_reason():
++    assert 'ZZZ' in pair_funding_carry('BTC', 'ZZZ', 1, 1, {'BTC': 0.0})['funding_reason']
++
++
++def test_server_rates_survive_one_failed_request(monkeypatch):
++    def fake_hl(payload):
++        if payload.get('dex') == 'xyz':
++            raise RuntimeError('timeout')
++        return PAYLOAD
++    monkeypatch.setattr(server, 'hl', fake_hl)
++    assert server._current_funding_rates() == {'BTC': 0.0000125, 'ETH': -0.00002}
++
++
++def test_server_rates_empty_when_everything_fails(monkeypatch):
++    def failing(_payload):
++        raise RuntimeError('sin red')
++    monkeypatch.setattr(server, 'hl', failing)
++    assert server._current_funding_rates() == {}

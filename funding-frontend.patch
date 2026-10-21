@@ -1,0 +1,56 @@
+diff --git a/react_frontend/src/components/PairDetail.tsx b/react_frontend/src/components/PairDetail.tsx
+index 58fd4bb..e363169 100644
+--- a/react_frontend/src/components/PairDetail.tsx
++++ b/react_frontend/src/components/PairDetail.tsx
+@@ -1,7 +1,12 @@
+ import type {Pair,PairAnalytics} from '../types';
+-import {money,num} from '../format';
++import {money,num,signedMoney,tone} from '../format';
++const rate=(v:unknown)=>v==null||!Number.isFinite(Number(v))?'N/D':num(v,4)+'%/h';
++export function fundingTitle(a?:PairAnalytics){
++ if(a?.funding_per_day_usd==null)return a?.funding_reason||'Sin estimación de funding';
++ return `Estimado con las tasas vigentes (cambian cada hora). Long ${rate(a.funding_long_rate_pct_h)} · Short ${rate(a.funding_short_rate_pct_h)} · ${num(a.funding_apr_pct,1)}% anual sobre el nominal. Positivo: el par cobra; negativo: paga.`;
++}
+ export function PairDetail({pair,analytics}:{pair:Pair|null;analytics?:PairAnalytics}){
+  if(!pair)return null;
+- const fields=[['Estado',analytics?.pair_status||'N/D'],['Motivo',analytics?.pair_status_reason||'N/D'],['Riesgo por σ diario',money(analytics?.risk_usd_per_sigma_day)],['MAE',num(analytics?.mae_pct)+'%'],['MFE',num(analytics?.mfe_pct)+'%'],['Funding/día',money(analytics?.funding_per_day_usd)],['PnL long',money(pair.long_pnl as number)],['PnL short',money(pair.short_pnl as number)],['Tesis',String(pair.trade_note||'N/D')],['Invalidación',String(pair.invalidation_note||'N/D')]];
+- return <div className="pair-analytics-detail"><h3>Analítica del par</h3>{fields.map(([k,v])=><div className="detail-row" key={k}><span>{k}</span><b>{v}</b></div>)}</div>
++ const fields:[string,string,string?,string?][]=[['Estado',analytics?.pair_status||'N/D'],['Motivo',analytics?.pair_status_reason||'N/D'],['Riesgo por σ diario',money(analytics?.risk_usd_per_sigma_day)],['MAE',num(analytics?.mae_pct)+'%'],['MFE',num(analytics?.mfe_pct)+'%'],['Funding/día (est.)',signedMoney(analytics?.funding_per_day_usd),fundingTitle(analytics),analytics?.funding_per_day_usd==null?'':tone(analytics.funding_per_day_usd)],['PnL long',money(pair.long_pnl as number)],['PnL short',money(pair.short_pnl as number)],['Tesis',String(pair.trade_note||'N/D')],['Invalidación',String(pair.invalidation_note||'N/D')]];
++ return <div className="pair-analytics-detail"><h3>Analítica del par</h3>{fields.map(([k,v,title,cls])=><div className="detail-row" key={k}><span>{k}</span><b title={title} className={cls}>{v}</b></div>)}</div>
+ }
+diff --git a/react_frontend/src/components/PairTracker.tsx b/react_frontend/src/components/PairTracker.tsx
+index eeafc30..caa0845 100644
+--- a/react_frontend/src/components/PairTracker.tsx
++++ b/react_frontend/src/components/PairTracker.tsx
+@@ -1,5 +1,6 @@
+ import type {Pair,PairAnalytics} from '../types';
+-import {money,num} from '../format';
++import {money,num,signedMoney,tone} from '../format';
++import {fundingTitle} from './PairDetail';
+ export function PairTracker({pairs,analytics,onSelect}:{pairs:Pair[];analytics:Record<string,PairAnalytics>;onSelect:(id:string)=>void}){
+- return <section className="panel bottom"><h2>Seguimiento analítico</h2><div className="tablewrap"><table><thead><tr>{['Par','Estado','Z log','Régimen','Días / HL','MAE / MFE','Liq.','Funding/día','Flotante'].map(t=><th key={t}>{t}</th>)}</tr></thead><tbody>{pairs.map(p=>{const a=analytics[p.id];return <tr key={p.id} tabIndex={0} onClick={()=>onSelect(p.id)} onKeyDown={e=>{if(e.key==='Enter')onSelect(p.id)}}><td>{p.long}/{p.short}</td><td title={a?.pair_status_reason||''}>{a?.pair_status||'N/D'}</td><td>{num(a?.z_log)}</td><td>{a?.regime||'N/D'} · {a?.health?.status||'N/D'}</td><td>{num(a?.age_days)} / {num(a?.age_vs_half_life)}×</td><td>{num(a?.mae_pct)}% / {num(a?.mfe_pct)}%</td><td>{num(a?.liq_distance_pct)}%</td><td>{money(a?.funding_per_day_usd)}</td><td>{money(p.pnl)}</td></tr>})}</tbody></table></div></section>
++ return <section className="panel bottom"><h2>Seguimiento analítico</h2><div className="tablewrap"><table><thead><tr>{['Par','Estado','Z log','Régimen','Días / HL','MAE / MFE','Liq.','Funding/día (est.)','Flotante'].map(t=><th key={t}>{t}</th>)}</tr></thead><tbody>{pairs.map(p=>{const a=analytics[p.id];return <tr key={p.id} tabIndex={0} onClick={()=>onSelect(p.id)} onKeyDown={e=>{if(e.key==='Enter')onSelect(p.id)}}><td>{p.long}/{p.short}</td><td title={a?.pair_status_reason||''}>{a?.pair_status||'N/D'}</td><td>{num(a?.z_log)}</td><td>{a?.regime||'N/D'} · {a?.health?.status||'N/D'}</td><td>{num(a?.age_days)} / {num(a?.age_vs_half_life)}×</td><td>{num(a?.mae_pct)}% / {num(a?.mfe_pct)}%</td><td>{num(a?.liq_distance_pct)}%</td><td title={fundingTitle(a)} className={a?.funding_per_day_usd==null?'':tone(a.funding_per_day_usd)}>{signedMoney(a?.funding_per_day_usd)}</td><td>{money(p.pnl)}</td></tr>})}</tbody></table></div></section>
+ }
+diff --git a/react_frontend/src/format.ts b/react_frontend/src/format.ts
+index 4fe999a..968fd4f 100644
+--- a/react_frontend/src/format.ts
++++ b/react_frontend/src/format.ts
+@@ -1,4 +1,5 @@
+ export const money=(v:unknown)=>v==null||!Number.isFinite(Number(v))?'N/D':`${Number(v)<0?'-':''}$${Math.abs(Number(v)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
++export const signedMoney=(v:unknown)=>v==null||!Number.isFinite(Number(v))?'N/D':`${Number(v)>0?'+':''}${money(v)}`;
+ export const num=(v:unknown,d=2)=>v==null||!Number.isFinite(Number(v))?'N/D':Number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+ export const tone=(v:unknown)=>v==null?'':Number(v)>=0?'positive':'negative';
+ export const pref=(k:string,d:string)=>{try{return localStorage.getItem('pairs-react-'+k)||d}catch{return d}};
+diff --git a/react_frontend/src/types.ts b/react_frontend/src/types.ts
+index 1e3835a..edc69b1 100644
+--- a/react_frontend/src/types.ts
++++ b/react_frontend/src/types.ts
+@@ -6,7 +6,7 @@ export type Bar={timestamp:number;open:number;high:number;low:number;close:numbe
+ 
+ export type AdaptiveLevels={status:string;regime:string;reason:string;levels:Record<string,number>;level_reasons?:Record<string,string>;reference_source?:string;reference_ratio?:number;horizon_days?:number;samples?:number;as_of_ms?:number};
+ 
+-export type PairAnalytics={status:string;reason?:string;z_log?:number|null;regime?:string;health?:{status?:string;half_life_days?:number|null};age_days?:number|null;age_vs_half_life?:number|null;mae_pct?:number|null;mfe_pct?:number|null;liq_distance_pct?:number|null;imbalance_pct?:number|null;funding_per_day_usd?:number|null;risk_usd_per_sigma_day?:number|null;pair_status?:string;pair_status_reason?:string;levels_v3?:AdaptiveLevels & {add_allowed?:boolean;equilibrium_ratio?:number;scenarios?:Record<string,unknown>}};
++export type PairAnalytics={status:string;reason?:string;z_log?:number|null;regime?:string;health?:{status?:string;half_life_days?:number|null};age_days?:number|null;age_vs_half_life?:number|null;mae_pct?:number|null;mfe_pct?:number|null;liq_distance_pct?:number|null;imbalance_pct?:number|null;funding_per_day_usd?:number|null;funding_apr_pct?:number|null;funding_long_rate_pct_h?:number|null;funding_short_rate_pct_h?:number|null;funding_reason?:string;risk_usd_per_sigma_day?:number|null;pair_status?:string;pair_status_reason?:string;levels_v3?:AdaptiveLevels & {add_allowed?:boolean;equilibrium_ratio?:number;scenarios?:Record<string,unknown>}};
+ export type AnalyticsResponse={as_of_ms:number;pairs:Record<string,PairAnalytics>};
+ export type ScannerCandidate={pair_id:string;label:string;long:string;short:string;venue:string;status:string;reason?:string|null;ratio?:number|null;ratio_change_pct?:number|null;matched_rows:number;missing_long:number[];missing_short:number[]};
+ export type ScannerResponse={interval:string;candidates:ScannerCandidate[];total:number;as_of_ms:number};

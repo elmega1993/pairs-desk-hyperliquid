@@ -15,6 +15,7 @@ from pairs_desk.storage import load_settings
 from pairs_desk.frontend_archive import archive_frontend
 from pairs_desk.metrics import position_map, ratio_bars, liquidation_distance, closed_pair_trade_events, archived_pair_entry_ratio, management_signals
 from pairs_desk.ledger import Ledger, active_funding
+from pairs_desk.funding_carry import funding_rates, pair_funding_carry
 from pairs_desk.market_catalog import MarketCatalog
 from pairs_desk.market_assets import AssetUniverseService
 from pairs_desk.market_pair_analysis import PairAnalysisService
@@ -422,9 +423,16 @@ def _analytic_for_pair(pair, now_ms):
             'horizon_days':horizon,'health':health,'age_days':age,'age_vs_half_life':age_ratio,
             'risk_usd_per_sigma_day':risk_day,'risk_usd_per_sigma_h':risk_h,
             'liq_distance_pct':pair.get('liq'),'imbalance_pct':pair.get('imbalance'),
-            'funding_per_day_usd':None,'funding_reason':'Ledger de 7 días no verificado',
             'pair_status':status,'pair_status_reason':reason,'hit_rates':hit,
             'levels_v3':levels,**{k:v for k,v in mae.items() if k in ('mae_pct','mfe_pct','mae_usd','mfe_usd')}}
+
+def _current_funding_rates():
+    """Tasas de funding vigentes (core + xyz). Si una consulta falla, se omite sin romper la analítica."""
+    rates={}
+    for payload in ({'type':'metaAndAssetCtxs'},{'type':'metaAndAssetCtxs','dex':'xyz'}):
+        try:rates.update(funding_rates(hl(payload)))
+        except Exception:pass
+    return rates
 
 @app.get('/api/analytics')
 def api_analytics():
@@ -454,9 +462,13 @@ def api_analytics():
                       'pnl':safe_number(lp.get('unrealizedPnl'))+safe_number(sp.get('unrealizedPnl')),
                       'opened_at':saved.get('opened_at')})
     now_ms=int(time.time()*1000)
+    rates=_current_funding_rates()
     def compute(pair):
-        try:return pair['id'],_analytic_for_pair(pair,now_ms)
-        except Exception as exc:return pair['id'],{'status':'unavailable','reason':'Error analítico: '+type(exc).__name__,'pair_status':'SIN_DATOS'}
+        try:result=_analytic_for_pair(pair,now_ms)
+        except Exception as exc:result={'status':'unavailable','reason':'Error analítico: '+type(exc).__name__,'pair_status':'SIN_DATOS'}
+        long_coin,short_coin=pair['id'].split('|',1)
+        result.update(pair_funding_carry(long_coin,short_coin,pair.get('long_usd'),pair.get('short_usd'),rates))
+        return pair['id'],result
     with ThreadPoolExecutor(max_workers=3) as pool: results=dict(pool.map(compute,pairs))
     return {'as_of_ms':now_ms,'pairs':results}
 

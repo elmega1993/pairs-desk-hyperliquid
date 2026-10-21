@@ -1,0 +1,11 @@
+diff --git a/react_frontend/src/style.css b/react_frontend/src/style.css
+index a6d07ec..1b54c8c 100644
+--- a/react_frontend/src/style.css
++++ b/react_frontend/src/style.css
+@@ -139,3 +139,6 @@ small,.kpi label,.metrics small,.eyebrow,.fresh,header p,.detail-row span{color:
+ .chart-stats-summary small{font-size:10px;color:#aab9d4;letter-spacing:0}
+ .chart-stats-summary em{font-size:10px;color:#9fb0cb}
+ .chart-stats-summary>div{flex-direction:row;align-items:baseline;gap:6px}
++
++/* Fondo negro en los gráficos de velas */
++.chartbox{background:#000;border-radius:6px}
