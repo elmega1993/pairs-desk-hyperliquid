@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .lifecycle import archive_closed_pairs
 from .metrics import closed_pair_trade_events, archived_pair_entry_ratio
+from .closed_ratio import close_ratio_from_fills
 from .storage import load_settings, save_settings
 
 _LOCK = threading.RLock()
@@ -74,6 +75,8 @@ def archive_frontend(settings_path: Path, account: str, positions: dict, fills: 
                         closed['long'], closed['short'], fills, opened, closed_at)
                     closed['entry_ratio'] = archived_pair_entry_ratio(
                         closed['long'], closed['short'], fills, opened)
+                    closed['close_ratio'] = close_ratio_from_fills(
+                        closed['long'], closed['short'], fills, opened, closed_at)
             save_settings(settings_path, updated)
             for p in cfg.get('pairs', []):
                 if p not in updated.get('pairs', []):

@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from .metrics import latest_closed_cycle
+from .closed_ratio import close_ratio_from_fills
 
 
 def archive_closed_pairs(
@@ -68,6 +69,7 @@ def archive_closed_pairs(
         if archive_id not in existing_ids:
             realized = float(lc['realized']) + float(sc['realized'])
             fees = float(lc['fees']) + float(sc['fees'])
+            close_ratio = close_ratio_from_fills(long_sym, short_sym, fills, opened_at, closed_at)
             closed_history.append({
                 'id': archive_id,
                 'long': long_sym,
@@ -77,6 +79,7 @@ def archive_closed_pairs(
                 'realized': realized,
                 'fees': fees,
                 'net_realized': realized - fees,
+                **({'close_ratio': close_ratio} if close_ratio is not None else {}),
             })
             existing_ids.add(archive_id)
         archived.append(pair_cfg)

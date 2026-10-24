@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pairs_desk.storage import load_settings
 from pairs_desk.frontend_archive import archive_frontend
 from pairs_desk.metrics import candle_window, position_map, ratio_bars, liquidation_distance, closed_pair_trade_events, archived_pair_entry_ratio, management_signals
+from pairs_desk.closed_ratio import close_ratio_from_fills, ratio_change_since_close
 from pairs_desk.ratio_changes import ratio_changes_from_bars
 from pairs_desk.ledger import Ledger, active_funding
 from pairs_desk.funding_carry import funding_rates, pair_funding_carry
@@ -69,6 +70,23 @@ def hl(payload):
     r = _http.post(API, json=payload, timeout=(4, 14))
     r.raise_for_status()
     return r.json()
+
+def current_mids_for_closed(rows):
+    """Read current Core/XYZ mids only when the closed-pair table needs them."""
+    if not rows:
+        return {}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        core_future = pool.submit(hl, {'type':'allMids'})
+        xyz_future = pool.submit(hl, {'type':'allMids','dex':'xyz'})
+        core, xyz = core_future.result(), xyz_future.result()
+    mids = {}
+    for symbol, value in (core or {}).items():
+        try: mids[symbol] = float(value)
+        except (TypeError, ValueError): pass
+    for symbol, value in (xyz or {}).items():
+        try: mids[symbol if ':' in symbol else f'xyz:{symbol}'] = float(value)
+        except (TypeError, ValueError): pass
+    return mids
 
 def safe_number(value, fallback=0):
     try: return float(value)
@@ -194,11 +212,20 @@ def states():
         row=dict(item)
         opened=int(row.get('opened_at') or 0); closed=int(row.get('closed_at') or 0)
         row['entry_ratio']=row.get('entry_ratio') or (archived_pair_entry_ratio(row.get('long',''),row.get('short',''),fills,opened) if fills else None)
+        row['close_ratio']=row.get('close_ratio') or (close_ratio_from_fills(row.get('long',''),row.get('short',''),fills,opened,closed) if fills else None)
         row['events']=row.get('events') or (closed_pair_trade_events(row.get('long',''),row.get('short',''),fills,opened,closed) if fills else [])
         for ev in row['events']:
             item=dict(ev); item['pair']=f"{row.get('long','')}/{row.get('short','')}"; item['status']='closed'; operation_events.append(item)
         row['net_realized']=safe_number(row.get('net_realized'), safe_number(row.get('realized'))-safe_number(row.get('fees')))
         archived.append(row)
+    try:
+        mids=current_mids_for_closed(archived)
+    except Exception:
+        mids={}
+    for row in archived:
+        long_mid=mids.get(row.get('long')); short_mid=mids.get(row.get('short'))
+        current_ratio=long_mid/short_mid if long_mid and short_mid else None
+        row['ratio_since_close_pct']=ratio_change_since_close(current_ratio,row.get('close_ratio'))
     archived_realized=sum(safe_number(p.get('realized')) for p in archived)
     archived_fees=sum(safe_number(p.get('fees')) for p in archived)
     account_funding=ledger.account_funding(account)
