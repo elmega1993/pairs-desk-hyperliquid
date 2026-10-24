@@ -15,7 +15,8 @@ Fecha de referencia: 2026-10-17.
 ## Riesgos conocidos
 
 - La interfaz contiene rutas de órdenes reales y la UI de órdenes React no está validada en testnet.
-- El plan vigente todavía contempla navegación móvil, pruebas de `PairActions`, separación adicional de `App.tsx` y tareas de backend.
+- `PairActions` ahora muestra el contador de tickets, bloquea tickets vencidos, refresca el par tras ejecutar y tolera respuestas HTTP no JSON; esto está validado localmente, pero no reemplaza la validación en testnet.
+- El plan vigente todavía contempla navegación móvil, separación adicional de `App.tsx` y tareas de backend.
 - No se debe tratar el historial local de PNL como continuo: puede contener huecos cuando no hubo registro.
 
 ## Fuente de verdad

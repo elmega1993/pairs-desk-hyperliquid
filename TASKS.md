@@ -5,14 +5,14 @@ Estas tareas se mantienen alineadas con `docs/current/PLAN_CONSOLIDACION.md`. Ma
 ## Prioridad alta — seguridad y operación
 
 - [ ] Validar en testnet el flujo React de `PairActions` antes de considerarlo operativo.
-- [ ] Completar cuenta regresiva, bloqueo al vencer y refresco de posiciones tras una orden.
-- [ ] Manejar respuestas no JSON en `request()`.
+- [x] Completar cuenta regresiva, bloqueo al vencer y refresco de posiciones tras una orden. Verificado con pruebas locales; falta validación operativa en testnet.
+- [x] Manejar respuestas no JSON en `request()`.
 
 ## Prioridad media — React
 
 - [ ] Migrar KLineCharts a una dependencia npm importada por TypeScript.
 - [ ] Dividir `App.tsx` en hooks y componentes más pequeños.
-- [ ] Agregar pruebas de comportamiento para `PairActions`.
+- [x] Agregar pruebas de comportamiento para `PairActions` (contratos de expiración, bloqueo, refresco y errores HTTP).
 - [ ] Resolver navegación y controles en pantallas móviles.
 - [ ] Atenuar secciones sin contenido y mejorar indicadores que hoy dependen solo del color.
 
