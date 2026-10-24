@@ -13,7 +13,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pairs_desk.storage import load_settings
 from pairs_desk.frontend_archive import archive_frontend
-from pairs_desk.metrics import position_map, ratio_bars, liquidation_distance, closed_pair_trade_events, archived_pair_entry_ratio, management_signals
+from pairs_desk.metrics import candle_window, position_map, ratio_bars, liquidation_distance, closed_pair_trade_events, archived_pair_entry_ratio, management_signals
+from pairs_desk.ratio_changes import ratio_changes_from_bars
 from pairs_desk.ledger import Ledger, active_funding
 from pairs_desk.funding_carry import funding_rates, pair_funding_carry
 from pairs_desk.market_catalog import MarketCatalog
@@ -200,6 +201,7 @@ def states():
         archived.append(row)
     archived_realized=sum(safe_number(p.get('realized')) for p in archived)
     archived_fees=sum(safe_number(p.get('fees')) for p in archived)
+    account_funding=ledger.account_funding(account)
     active_realized=0 if not pairs else sum(p['realized'] for p in pairs) if all(p['realized'] is not None for p in pairs) else None
     active_fees=0 if not pairs else sum(p['fees'] for p in pairs) if all(p['fees'] is not None for p in pairs) else None
     realized_total=None if active_realized is None else active_realized+archived_realized
@@ -216,7 +218,8 @@ def states():
     operation_events=sorted(operation_events,key=lambda e:int(e.get('time') or 0),reverse=True)[:200]
     summary={'realized':realized_total,'active_realized':active_realized,'archived_realized':archived_realized,'fees':fees_total,'active_fees':active_fees,'archived_fees':archived_fees,'total':grand_total,'open_plus_realized':open_plus_realized,'unrealized':unreal,'exposure':exposure,'funding':funding_total,'margin_used':margin,'margin_core':core_margin,
         'equity_core':core_equity,'margin_pct':None if not core_equity or core_equity<=0 else core_margin/core_equity*100,
-        'delta':sum(p['long_usd']-p['short_usd'] for p in pairs)}
+        'delta':sum(p['long_usd']-p['short_usd'] for p in pairs),
+        'account_funding':account_funding}
     # A subtotal is useful but must not masquerade as fully verified net PNL.
     known_funding = sum(v for v in funding_values if v is not None)
     summary['net_known_subtotal'] = (unreal + realized_total - fees_total + known_funding) if realized_total is not None and fees_total is not None else None
@@ -267,6 +270,65 @@ def api_state():
         with _STATES_LOCK: return states()
     except HTTPException:raise
     except Exception as exc:raise HTTPException(503,f'Error de lectura: {type(exc).__name__}')
+
+@app.get('/api/position-ratio-changes')
+def api_position_ratio_changes():
+    cfg, err = load_settings(SETTINGS)
+    if err:
+        raise HTTPException(409, 'Configuración inválida')
+    account = cfg.get('address', '').strip()
+    if not ADDRESS.fullmatch(account):
+        raise HTTPException(400, 'Cuenta no configurada')
+
+    now_ms = int(time.time() * 1000)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        core_future = pool.submit(hl, {'type': 'clearinghouseState', 'user': account})
+        xyz_future = pool.submit(hl, {'type': 'clearinghouseState', 'user': account, 'dex': 'xyz'})
+        core = core_future.result()
+        xyz = xyz_future.result()
+    positions = position_map(core)
+    positions.update({key if ':' in key else f'xyz:{key}': value for key, value in position_map(xyz).items()})
+
+    active = []
+    for saved in cfg.get('pairs', []):
+        long, short = saved.get('long'), saved.get('short')
+        lp, sp = positions.get(long), positions.get(short)
+        if not long or not short or not lp or not sp:
+            continue
+        long_size, short_size = safe_number(lp.get('szi')), safe_number(sp.get('szi'))
+        long_mark = abs(safe_number(lp.get('positionValue')) / long_size) if long_size else 0
+        short_mark = abs(safe_number(sp.get('positionValue')) / short_size) if short_size else 0
+        if long_size <= 0 or short_size >= 0 or long_mark <= 0 or short_mark <= 0:
+            continue
+        active.append((f'{long}|{short}', long, short, long_mark / short_mark))
+
+    start, end = candle_window(5, n=320, now_ms=now_ms)
+
+    def read_pair(item):
+        pair_id, long, short, current_ratio = item
+        try:
+            def read(coin):
+                raw = hl({'type': 'candleSnapshot', 'req': {
+                    'coin': coin, 'interval': '5m', 'startTime': start, 'endTime': end,
+                }})
+                return pd.DataFrame([
+                    {'time': int(row['t']), 'open': float(row['o']), 'high': float(row['h']),
+                     'low': float(row['l']), 'close': float(row['c'])}
+                    for row in raw
+                ])
+
+            left, right = read(long), read(short)
+            if left.empty or right.empty:
+                raise ValueError('historial vacío')
+            return pair_id, ratio_changes_from_bars(
+                current_ratio, ratio_bars(left, right, '5m'), now_ms
+            )
+        except Exception:
+            return pair_id, {'1h': None, '24h': None}
+
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(active)))) as pool:
+        results = dict(pool.map(read_pair, active))
+    return {'as_of_ms': now_ms, 'pairs': results}
 
 @app.get('/api/scanner')
 def api_scanner(interval: str = '1h', search: str = '', venue: str = '', limit: int = 50):

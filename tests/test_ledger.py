@@ -87,6 +87,15 @@ def test_funding_sign_zero_unknown_and_per_leg_windows(tmp_path):
     assert ledger.funding('a',[('A',15,30)]) is None
 
 
+def test_account_funding_total_requires_complete_coverage(tmp_path):
+    ledger=Ledger(tmp_path/'db')
+    assert ledger.account_funding('a') is None
+    ledger.sync('a',api([], [funding(15), funding(25,'B','3')]),100_000)
+    assert ledger.account_funding('a') == 1
+    ledger.sync('a',api([], [funding(15), funding(25,'B','3')]),200_000)
+    assert ledger.account_funding('a') == 1
+
+
 def test_closed_reconciliation_and_export(tmp_path):
     rows=[fill(10,1),fill(20,2,'B','A'),fill(30,3,'A','A','1','5'),fill(40,4,'B','B','-1','2')]
     ledger=Ledger(tmp_path/'db'); ledger.sync('a',api(rows,[funding(15),funding(35,'B','3')]),100_000)
@@ -98,6 +107,30 @@ def test_closed_reconciliation_and_export(tmp_path):
     bad=closed_accounting(ledger,'a',dict(old,realized=100),rows,True)
     assert bad['total_pnl'] is None
     assert build_export_rows([], [old], timezone.utc)[0]['total_pnl_usd'] is None
+
+
+def test_closed_funding_survives_fee_reconciliation_mismatch(tmp_path):
+    rows=[fill(10,1),fill(20,2,'B','A'),fill(30,3,'A','A','1','5'),fill(40,4,'B','B','-1','2')]
+    ledger=Ledger(tmp_path/'db'); ledger.sync('a',api(rows,[funding(15),funding(35,'B','3')]),100_000)
+    item=dict(long='A',short='B',opened_at=10,closed_at=40,realized=7,fees=99)
+
+    out=closed_accounting(ledger,'a',item,rows,True)
+
+    assert out['funding']==1
+    assert out['funding_complete'] is True
+    assert out['total_pnl'] is None
+
+
+def test_closed_funding_survives_missing_final_fill_in_archive_window(tmp_path):
+    rows=[fill(10,1),fill(20,2,'B','A'),fill(30,3,'A','A','1','5'),fill(40,4,'B','B','-1','2')]
+    ledger=Ledger(tmp_path/'db'); ledger.sync('a',api(rows,[funding(15),funding(35,'B','3')]),100_000)
+    item=dict(long='A',short='B',opened_at=10,closed_at=39,realized=7,fees=.4)
+
+    out=closed_accounting(ledger,'a',item,rows,True)
+
+    assert out['funding']==1
+    assert out['funding_complete'] is True
+    assert out['total_pnl'] is None
 
 
 def test_concurrent_sync_is_idempotent(tmp_path):

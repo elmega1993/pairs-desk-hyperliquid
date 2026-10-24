@@ -156,19 +156,45 @@ class Ledger:
                     total += float(delta['usdc'])
         return total
 
+    def account_funding(self, account):
+        """Return all registered account funding only after a complete sweep."""
+        state = self.state(account, 'funding')
+        if state.get('complete') is not True or state.get('covered_until') is None:
+            return None
+        total = 0.0
+        for row in self.rows(account, 'funding'):
+            try:
+                total += float(row['delta']['usdc'])
+            except (KeyError, TypeError, ValueError):
+                return None
+        return total
+
 
 def closed_accounting(ledger, account, item, fills, fills_complete):
     """Reconstruct each leg separately, rejecting mismatched legacy archives."""
     from .metrics import latest_closed_cycle
     out = dict(item)
     out.update(funding=None, funding_complete=False, total_pnl=None)
+    opened_at = int(item.get('opened_at') or 0)
+    closed_at = int(item.get('closed_at') or 0)
+    if opened_at and closed_at >= opened_at:
+        funding = ledger.funding(account, [
+            (item[leg], opened_at, closed_at) for leg in ('long', 'short')
+        ])
+        if funding is not None:
+            out.update(
+                funding=funding,
+                funding_complete=True,
+                funding_source='userFunding/ledger-v1',
+                funding_account=account.lower(),
+            )
     if not fills_complete:
         if (item.get('funding_source') == 'userFunding/ledger-v1'
                 and item.get('funding_account') == account.lower()
                 and item.get('funding_complete') is True):
             return dict(item)
         return out
-    end = int(item.get('closed_at') or 0)
+    end = closed_at
     bounded = [f for f in fills if int(f['time']) <= end]
     cycles = [latest_closed_cycle(bounded, item[leg], 0.0) for leg in ('long', 'short')]
     if not all(cycles):
@@ -179,10 +205,14 @@ def closed_accounting(ledger, account, item, fills, fills_complete):
     if item.get('realized') is None or item.get('fees') is None or not math.isclose(realized, float(item['realized']), abs_tol=1e-6) or not math.isclose(fees, float(item['fees']), abs_tol=1e-6):
         return out
     intervals = [(item[leg], c['opened_at'], c['closed_at']) for leg, c in zip(('long', 'short'), cycles)]
-    funding = ledger.funding(account, intervals)
-    out.update(funding=funding, funding_complete=funding is not None,
-               funding_source='userFunding/ledger-v1', funding_account=account.lower(),
-               total_pnl=None if funding is None else realized-fees+funding)
+    if out['funding'] is not None:
+        out['total_pnl'] = realized-fees+out['funding']
+    else:
+        funding = ledger.funding(account, intervals)
+        if funding is not None:
+            out.update(funding=funding, funding_complete=True,
+                       funding_source='userFunding/ledger-v1', funding_account=account.lower(),
+                       total_pnl=realized-fees+funding)
     return out
 
 

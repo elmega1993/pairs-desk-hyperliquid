@@ -8,6 +8,20 @@ export function normalizePnlHistory(rows:PnlPoint[]):PnlPoint[]{
  return rows.filter(r=>Number.isFinite(r.time)&&Number.isFinite(r.pnl)).map(r=>({...r,time:r.time<1e11?r.time*1000:r.time})).sort((a,b)=>a.time-b.time).filter((r,i,a)=>i===a.length-1||r.time!==a[i+1].time);
 }
 
+export type DailyPnlRow={date:string;pnl:number;cumulative:number;partial:boolean};
+const dailyDate=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'});
+export function dailyPnl(rows:PnlPoint[]):DailyPnlRow[]{
+ const groups=new Map<string,PnlPoint[]>();
+ normalizePnlHistory(rows).forEach(row=>{const date=dailyDate.format(new Date(row.time));const group=groups.get(date)||[];group.push(row);groups.set(date,group)});
+ const result:DailyPnlRow[]=[];let previous:number|null=null;
+ groups.forEach((group,date)=>{
+  const first=group[0],last=group[group.length-1];
+  result.push({date,pnl:last.pnl-(previous===null?first.pnl:previous),cumulative:last.pnl,partial:previous===null});
+  previous=last.pnl;
+ });
+ return result;
+}
+
 /** Snapshots are only written while the app is open, so long holes are real "no data" periods. */
 export function gapThreshold(rows:PnlPoint[]):number{
  const steps:number[]=[];for(let i=1;i<rows.length;i++)steps.push(rows[i].time-rows[i-1].time);
