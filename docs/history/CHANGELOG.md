@@ -3,6 +3,14 @@
 
 # Pairs Desk 2.0 — Historial
 
+## Dashboard React — densidad y resumen operativo (2026-10-24)
+
+- `Mis posiciones` ahora muestra solo el par, PNL y variación del ratio en 1h/24h; filtros y ordenamiento se agrupan en un desplegable.
+- `Agregar par` y `Operar par` ganan protagonismo; `Radar de posiciones` y `Pares cerrados` se muestran lado a lado en escritorio.
+- `Resumen del par` conserva únicamente nominales, exposición, PNL flotante, PNL long/short, PNL realizado, PNL neto, funding y comisiones, con color por signo.
+- `Pares cerrados` incorpora el cambio del ratio desde el cierre usando fills de cierre y precios actuales verificables.
+- Se reforzó el tamaño y contraste de los cambios de ratio 1h/24h en `Mis posiciones` para paneles angostos.
+
 ## Auditoría visual y de monitoreo (2026-10-16)
 
 - **Cola de atención:** sube al tope del escritorio y ordena por severidad. Un error o la ausencia de analítica ya **no** se muestra como "Sin pares que requieran acción": se informa "Analítica no disponible", "desactualizada" o "sin analítica" por par. `SIN_DATOS` deja de contarse como alerta. Los estados desconocidos se muestran como advertencia. Lógica pura en `src/attention.ts`.

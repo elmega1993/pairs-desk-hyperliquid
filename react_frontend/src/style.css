@@ -11,6 +11,8 @@
 
 @media(max-width:1250px){.bottom-grid{grid-template-columns:1fr}}.layout-toolbar{display:none}
 
+.positions .position-ratio-change{font-size:10.5px;line-height:1.25;font-weight:600;letter-spacing:.01em;color:#b7c8e7}
+
 /* PNL chart: real time axis, USD scale and pointer inspection. */
 .pnl-plot{position:relative;width:100%;min-width:0;height:230px;overflow:hidden}.pnl-plot svg{display:block;width:100%;height:100%;touch-action:pan-y}.pnl-plot text{font-family:inherit}.bottom .pnl-plot svg{height:100%}
 

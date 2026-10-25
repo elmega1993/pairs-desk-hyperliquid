@@ -7,6 +7,11 @@
 - Gráfico PNL (`PnlChart.tsx`) con eje temporal, escala USD, línea cero y tooltip. Los datos provienen solo de `/api/state` (`pnl_history`). Normaliza timestamps (segundos/milisegundos), ordena y reduce puntos por buckets preservando extremos.
 - Build condicional y `npm ci` con lockfile en el launcher.
 - Pulido visual verificado en navegador (ver `docs/visual/` y la entrada de `docs/history/CHANGELOG.md`).
+- `Mis posiciones` fue compactada para mostrar par, PNL y cambios de ratio 1h/24h; búsqueda y ordenamiento viven en un único desplegable.
+- El encabezado operativo prioriza `Agregar par` y `Operar par`; `Radar de posiciones` y `Pares cerrados` comparten fila en escritorio y se apilan en móvil.
+- `Resumen del par` quedó reducido a métricas operativas, incluyendo PNL long/short y color por signo.
+- Los indicadores 1h/24h de `Mis posiciones` fueron ajustados para conservar legibilidad en anchos reducidos.
+- `Pares cerrados` expone `DESDE CIERRE`, comparando el ratio actual con el VWAP de los fills de cierre cuando hay datos verificables.
 
 ## Pendiente
 - Cargar KLineCharts como módulo npm (hoy: `<script>` desde `/vendor`, con SHA-256 verificado al iniciar).
