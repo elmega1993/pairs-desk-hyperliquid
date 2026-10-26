@@ -15,10 +15,13 @@ Fecha de referencia: 2026-10-24.
 - `Pares cerrados` incluye el cambio del ratio desde el cierre cuando los fills y precios actuales son verificables.
 - KLineCharts se carga como archivo local verificado por SHA-256; todavía no es una dependencia npm importada por TypeScript.
 - El backend separa datos de mercado, ledger y órdenes en almacenamientos distintos.
+- Se agregó un análisis retrospectivo local en `scripts/analyze_operations.py`, con módulos puros en `pairs_desk/learning_data.py`, `operation_learning.py` y `learning_metrics.py`. Lee settings/SQLite en modo solo lectura y genera el informe privado en `~/.local/share/crypto-pairs-desk/analysis`.
+- El informe también reconcilia en vivo `perpMonth` de Hyperliquid y las patas activas; la última verificación identificó 14 pares activos y aproximadamente USD 2.454 de PNL de 30 días.
+- La bitácora de órdenes auto-reconcilia intentos `uncertain` solo cuando hubo únicamente intención, ningún envío/fill y las cantidades actuales coinciden con las originales; los desbalances reales siguen bloqueados. Ver `docs/current/AUTO_RECONCILIACION_TRADING.md`.
 
 ## Riesgos conocidos
 
-- La interfaz contiene rutas de órdenes reales y la UI de órdenes React no está validada en testnet.
+- La interfaz contiene rutas de órdenes reales y la UI de órdenes React no está validada en testnet; la auto-reconciliación no envía órdenes.
 - `PairActions` ahora muestra el contador de tickets, bloquea tickets vencidos, refresca el par tras ejecutar y tolera respuestas HTTP no JSON; esto está validado localmente, pero no reemplaza la validación en testnet.
 - El plan vigente todavía contempla navegación móvil, separación adicional de `App.tsx` y tareas de backend.
 - No se debe tratar el historial local de PNL como continuo: puede contener huecos cuando no hubo registro.

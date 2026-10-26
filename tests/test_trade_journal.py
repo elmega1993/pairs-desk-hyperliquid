@@ -1,6 +1,6 @@
 from pathlib import Path
 import pytest
-from pairs_desk.trade_journal import connect, begin, record, finish, pending, reconcile
+from pairs_desk.trade_journal import connect, begin, record, finish, pending, reconcile, auto_reconcile_no_effect
 from pairs_desk.trading import scaled_second_size
 
 LEGS = [dict(coin='LINK',is_buy=True,reduce_only=False,size=2.5,original_size=10),
@@ -30,6 +30,24 @@ def test_success_finishes_without_manual_reconciliation(tmp_path):
     attempt = begin(db, '0xab', 'A/B', 'Cerrar', LEGS)
     finish(db, attempt, 'complete')
     assert not pending(db, '0xab')
+
+
+def test_auto_reconciles_uncertain_intent_when_positions_are_unchanged(tmp_path):
+    db = connect(tmp_path/'auto.db')
+    attempt = begin(db, '0xabc', 'LINK/PYTH', 'Aumentar', LEGS)
+    finish(db, attempt, 'uncertain')
+    positions = {'LINK': {'szi': '10'}, 'PYTH': {'szi': '-200'}}
+    assert auto_reconcile_no_effect(db, '0xabc', positions) == [attempt]
+    assert pending(db, '0xabc') == []
+
+
+def test_auto_keeps_uncertain_attempt_when_position_changed(tmp_path):
+    db = connect(tmp_path/'auto_changed.db')
+    attempt = begin(db, '0xabc', 'LINK/PYTH', 'Aumentar', LEGS)
+    finish(db, attempt, 'uncertain')
+    positions = {'LINK': {'szi': '12'}, 'PYTH': {'szi': '-200'}}
+    assert auto_reconcile_no_effect(db, '0xabc', positions) == []
+    assert pending(db, '0xabc')[0][0] == attempt
 
 
 def test_second_leg_scaled_to_first_fill():

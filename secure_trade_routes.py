@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from pairs_desk.agent_vault import load_agent
 from pairs_desk.trading import preview_pair, project_pair_action, execute_pair, verify_agent
-from pairs_desk.trade_journal import connect, begin, finish, pending
+from pairs_desk.trade_journal import connect, begin, finish, pending, auto_reconcile_no_effect
 from pairs_desk.metrics import position_map
 
 router=APIRouter(prefix='/api/trade')
@@ -54,6 +54,16 @@ def _current_pair(cfg,address,hl,pair_id):
     def mark(p):
         n=abs(float(p.get('szi') or 0));return abs(float(p.get('positionValue') or 0))/n if n else 0
     return {'long':pair['long'],'short':pair['short'],'long_position':lp,'short_position':sp,'long_mark':mark(lp),'short_mark':mark(sp)}
+
+
+def _all_positions(address, hl):
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        core_future = pool.submit(hl, {'type': 'clearinghouseState', 'user': address})
+        xyz_future = pool.submit(hl, {'type': 'clearinghouseState', 'user': address, 'dex': 'xyz'})
+        core = position_map(core_future.result())
+        xyz = {k if ':' in k else f'xyz:{k}': v for k, v in position_map(xyz_future.result()).items()}
+    return {**core, **xyz}
 
 # Pair assignment: local-only management action; never signs or sends an order.
 class AddPairInput(BaseModel):
@@ -149,7 +159,13 @@ def status(request: Request):
     except Exception:
         agent=None
     try:
-        conn=connect();blocked=pending(conn,address);conn.close()
+        conn=connect()
+        try:
+            auto_reconcile_no_effect(conn,address,_all_positions(address,hl))
+        except Exception:
+            pass
+        blocked=pending(conn,address)
+        conn.close()
     except Exception:
         blocked=[('?', '?','journal_error',0)]
     return {'csrf':_TOK,'agent_configured':bool(agent),'agent':agent,'armed':_ARMED,'trading_blocked':bool(blocked),'pending':[{'id':t[0], 'pair':t[1], 'status':t[2]} for t in blocked]}

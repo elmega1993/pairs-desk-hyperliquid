@@ -3,6 +3,12 @@
 
 # Pairs Desk 2.0 — Historial
 
+## Trading — auto-reconciliación segura (2026-10-26)
+
+- Los intentos `uncertain` se reconcilian automáticamente al consultar el estado solo cuando la bitácora tiene únicamente la intención, no hubo envío/fill y las dos posiciones mantienen exactamente sus cantidades originales dentro de una tolerancia del 0,1 %.
+- Los casos con fills, respuestas inciertas o cambios de tamaño permanecen bloqueados para revisión manual.
+- Se agregaron regresiones en `tests/test_trade_journal.py` y se documentó el flujo en `docs/current/AUTO_RECONCILIACION_TRADING.md`.
+
 ## Dashboard React — densidad y resumen operativo (2026-10-24)
 
 - `Mis posiciones` ahora muestra solo el par, PNL y variación del ratio en 1h/24h; filtros y ordenamiento se agrupan en un desplegable.

@@ -87,39 +87,49 @@ def latest_closed_cycle(
     if not relevant:
         return None
 
-    newest = relevant[-1]
+    # Hyperliquid may split one market order into multiple fills sharing the
+    # exact same millisecond. A tid-based tie-breaker is not execution order:
+    # the last sorted fill can still have a nonzero remaining position.
+    closing_time = int(relevant[-1].get('time', 0) or 0)
+    closing_batch = [f for f in relevant if int(f.get('time', 0) or 0) == closing_time]
     try:
-        final_position = float(newest.get('startPosition') or 0) + _fill_signed_qty(newest)
+        signed_quantities = [_fill_signed_qty(f) for f in closing_batch]
+        starts = [float(f.get('startPosition') or 0) for f in closing_batch]
     except (TypeError, ValueError):
         return None
+
+    # For same-side closing chunks, the largest (long) or smallest (short)
+    # starting position is the batch's pre-trade position. Sum *all* chunks.
+    # Mixed-side executions at one timestamp cannot be ordered reliably here;
+    # refuse to archive rather than misclassifying a still-live position.
+    nonzero = [qty for qty in signed_quantities if abs(qty) > epsilon]
+    if not nonzero or (any(qty > epsilon for qty in nonzero) and any(qty < -epsilon for qty in nonzero)):
+        return None
+    opening_position = max(starts) if nonzero[0] < 0 else min(starts)
+    final_position = opening_position + sum(signed_quantities)
     if abs(final_position) > epsilon:
         return None
 
-    # Find the most recent opening boundary before the final flat fill.
-    opening_idx = None
-    for idx in range(len(relevant) - 1, -1, -1):
-        f = relevant[idx]
+    # Locate the latest flat-to-nonflat opening boundary, including every fill
+    # at that timestamp regardless of arbitrary tid order.
+    opening_time = None
+    for f in reversed(relevant):
         try:
             start_pos = float(f.get('startPosition') or 0)
         except (TypeError, ValueError):
             continue
         if abs(start_pos) <= epsilon and abs(_fill_signed_qty(f)) > epsilon:
-            opening_idx = idx
+            opening_time = int(f.get('time', 0) or 0)
             break
-    if opening_idx is None:
+    if opening_time is None:
         return None
 
-    cycle = relevant[opening_idx:]
-    # The selected cycle must actually finish flat.
-    last = cycle[-1]
-    final_position = float(last.get('startPosition') or 0) + _fill_signed_qty(last)
-    if abs(final_position) > epsilon:
-        return None
+    cycle = [f for f in relevant if int(f.get('time', 0) or 0) >= opening_time]
     fee = sum(float(f.get('fee') or 0) for f in cycle)
     realized = sum(float(f.get('closedPnl') or 0) for f in cycle)
     return {
-        'opened_at': int(cycle[0].get('time', 0)) or None,
-        'closed_at': int(last.get('time', 0)) or None,
+        'opened_at': opening_time or None,
+        'closed_at': closing_time or None,
         'realized': realized,
         'fees': fee,
         'complete': True,

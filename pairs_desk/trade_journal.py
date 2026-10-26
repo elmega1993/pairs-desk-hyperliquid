@@ -89,3 +89,35 @@ def reconcile(conn, attempt_id: str, note: str):
         raise ValueError('Intento no conciliable')
     record(conn, attempt_id, 'manual_reconciliation', None, {'status': 'user_verified'})
     finish(conn, attempt_id, 'reconciled', note.strip())
+
+
+def auto_reconcile_no_effect(conn, account: str, positions: dict[str, dict]) -> list[str]:
+    """Reconcile only uncertain attempts proven not to have reached the exchange."""
+    rows = conn.execute("SELECT id,pair,legs_json FROM attempts WHERE account=? AND status='uncertain' ORDER BY created_ms", (account.lower(),)).fetchall()
+    reconciled = []
+    for attempt_id, pair, legs_json in rows:
+        events = [row[0] for row in conn.execute('SELECT event FROM events WHERE attempt_id=?', (attempt_id,)).fetchall()]
+        if set(events) != {'intent'}:
+            continue
+        try:
+            legs = json.loads(legs_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(legs, list) or len(legs) != 2:
+            continue
+        unchanged = True
+        for leg in legs:
+            coin = str(leg.get('coin') or '')
+            original = float(leg.get('original_size') or 0)
+            current = float((positions.get(coin) or {}).get('szi') or 0)
+            intended_sign = 1 if leg.get('is_buy') else -1
+            original_sign = intended_sign if not leg.get('reduce_only') else -intended_sign
+            expected = original_sign * original
+            tolerance = max(1e-8, abs(expected) * 0.001)
+            if not coin or original <= 0 or abs(current - expected) > tolerance:
+                unchanged = False
+                break
+        if unchanged:
+            reconcile(conn, attempt_id, f'Auto-reconciliado: {pair} sin envío confirmado y cantidades sin cambios en Hyperliquid.')
+            reconciled.append(attempt_id)
+    return reconciled

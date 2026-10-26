@@ -31,6 +31,7 @@
 - [ ] Cuenta regresiva del ticket (40 s) y bloqueo del botón al vencer
 - [ ] Refrescar posiciones tras ejecutar una orden
 - [ ] Manejar respuestas de error que no sean JSON en `request()`
+- [x] Auto-reconciliar intentos sin envío cuando las posiciones permanecen sin cambios; conservar bloqueo para fills o desbalances.
 
 ## Fase 1c — Visual pendiente
 - [x] Indicador de estado de trading siempre visible (`TradeBadge`). Pendiente: cuenta regresiva y desarme automático (requiere backend)
@@ -48,4 +49,4 @@ Cerrados, Cuenta, Eventos, Alertas, Gestión.
 ## Fase 4 — Retiro
 Eliminar interfaces antiguas solo con paridad verificada.
 
-**Seguridad:** no modificar `secure_trade_routes.py` durante fases 0–2.
+**Seguridad:** las rutas de trading solo se modifican para controles explícitos de seguridad y conciliación; no se agregan envíos automáticos de órdenes.
