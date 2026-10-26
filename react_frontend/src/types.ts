@@ -1,7 +1,7 @@
 /** /api/state z is deprecated; use /api/analytics z_log when available. */
 export type Pair={id:string;long:string;short:string;pnl?:number|null;realized?:number|null;total_pnl?:number|null;funding?:number|null;fees?:number|null;size?:number|null;long_usd?:number|null;short_usd?:number|null;pnl_pct?:number|null;ratio?:number|null;entry_ratio?:number|null;ratio_change?:number|null;[key:string]:unknown};
 export type ClosedPair={id?:string;long?:string;short?:string;opened_at?:number|null;closed_at?:number|null;close_ratio?:number|null;ratio_since_close_pct?:number|null;realized?:number|null;fees?:number|null;funding?:number|null;total_pnl?:number|null;net_realized?:number|null;size?:number|null;[key:string]:unknown};
-export type Data={pairs:Pair[];closed_pairs?:ClosedPair[];summary:Record<string,number|null>;warnings?:string[];pnl_history?:Record<string,unknown>[];last_updated_ms?:number;pnl_source?:string;hl_pnl?:Record<string,Record<string,unknown>[]>;operation_events?:Record<string,unknown>[]};
+export type Data={pairs:Pair[];closed_pairs?:ClosedPair[];summary:Record<string,number|null>;warnings?:string[];pnl_history?:Record<string,unknown>[];last_updated_ms?:number;pnl_source?:string;hl_pnl?:Record<string,Record<string,unknown>[]>;official_pnl?:Record<'1d'|'7d'|'30d'|'all',number|null>;operation_events?:Record<string,unknown>[]};
 export type Bar={timestamp:number;open:number;high:number;low:number;close:number};
 
 export type AdaptiveLevels={status:string;regime:string;reason:string;levels:Record<string,number>;level_reasons?:Record<string,string>;reference_source?:string;reference_ratio?:number;horizon_days?:number;samples?:number;as_of_ms?:number};

@@ -3,11 +3,13 @@ import {money,tone} from '../format';
 
 export function PositionSummary({pair}:{pair:Pair|null}){
  if(!pair)return <div className="panel details"><h2>Resumen del par</h2><p>Sin posición</p></div>;
- const fields:[string,unknown][]=[
-  ['Long',pair.long],['Short',pair.short],
-  ['Nominal long',pair.long_usd],['Nominal short',pair.short_usd],['Exposición total',pair.size],
-  ['PNL flotante',pair.pnl],['PNL long',pair.long_pnl],['PNL short',pair.short_pnl],['PNL realizado',pair.realized],['PNL neto',pair.total_pnl],
-  ['Funding',pair.funding],['Comisiones',pair.fees],
+ const fields:[string,unknown,boolean,boolean][]=[
+  ['Exposición total',pair.size,true,false],
+  [`LONG ${pair.long}`,pair.long_pnl,true,true],
+  [`SHORT ${pair.short}`,pair.short_pnl,true,true],
+  ['Nominal long',pair.long_usd,true,false],['Nominal short',pair.short_usd,true,false],
+  ['PNL flotante',pair.pnl,true,false],['PNL realizado',pair.realized,true,false],['PNL neto',pair.total_pnl,true,false],
+  ['Funding',pair.funding,true,false],['Comisiones',pair.fees,true,false],
  ];
- return <div className="panel details"><h2>Resumen del par</h2>{fields.map(([label,value])=>{const numeric=['Nominal long','Nominal short','Exposición total','PNL flotante','PNL long','PNL short','PNL realizado','PNL neto','Funding','Comisiones'].includes(label);return <div className="detail-row" key={label}><span>{label}</span><b className={numeric?tone(value):''}>{numeric?money(value):String(value??'N/D')}</b></div>})}</div>;
+ return <div className="panel details"><h2>Resumen del par</h2>{fields.map(([label,value,numeric,highlight])=><div className={'detail-row '+(highlight?'leg-row ':'')+(label==='Exposición total'?'exposure-row':'')} key={label}><span>{label}</span><b className={label==='Exposición total'||label==='Nominal long'||label==='Nominal short'?'neutral':numeric?tone(value):''}>{numeric?money(value):String(value??'N/D')}</b></div>)}</div>;
 }

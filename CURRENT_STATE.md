@@ -1,6 +1,6 @@
 # Estado actual
 
-Fecha de referencia: 2026-10-24.
+Fecha de referencia: 2026-10-26.
 
 ## Confirmado en esta copia
 
@@ -12,6 +12,10 @@ Fecha de referencia: 2026-10-24.
 - El dashboard React tiene `Mis posiciones` compacta (par, PNL y ratio 1h/24h), filtros en un desplegable y `Radar de posiciones` junto a `Pares cerrados` en escritorio.
 - `Resumen del par` muestra solo long/short, nominales, exposición total, PNL flotante, PNL long/short, PNL realizado, PNL neto, funding y comisiones; los valores numéricos usan color por signo.
 - Los cambios de ratio 1h/24h en `Mis posiciones` tienen tipografía y contraste reforzados para lectura en paneles angostos.
+- El PNL total oficial de las cards y la serie principal priorizan Hyperliquid; el cálculo local permanece como fallback y reconciliación.
+- La card de PNL total incluye una mini línea de evolución; el gráfico acumulado usa más ticks y la paleta verde/rosa del gráfico de ratio.
+- `Resumen del par` muestra exposición primero y las patas como `LONG/SHORT símbolo` con su PNL en la misma fila.
+- El detalle del Explorador queda sticky junto a la tabla en escritorio y vuelve al flujo normal en móvil.
 - `Pares cerrados` incluye el cambio del ratio desde el cierre cuando los fills y precios actuales son verificables.
 - KLineCharts se carga como archivo local verificado por SHA-256; todavía no es una dependencia npm importada por TypeScript.
 - El backend separa datos de mercado, ledger y órdenes en almacenamientos distintos.

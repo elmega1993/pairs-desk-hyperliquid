@@ -123,6 +123,12 @@ def pnl_history(portfolio):
 def hl_pnl_windows(portfolio):
     return {key:hl_series(portfolio,window) for key,window in HL_PNL_WINDOWS.items()}
 
+def official_pnl_from_windows(windows):
+    """Last rebased PNL point per Hyperliquid window, or None when absent."""
+    return {key:(rows[-1]['pnl'] if rows else None) for key,rows in (windows or {}).items()} | {
+        key:None for key in HL_PNL_WINDOWS if key not in (windows or {})
+    }
+
 def local_pnl_history():
     if not SNAPSHOTS.exists(): return []
     rows=[]
@@ -255,7 +261,8 @@ def states():
     save_snapshot(summary)
     local_history=local_pnl_history()  # una sola lectura del archivo de snapshots
     history=local_history or pnl_history(portfolio)
-    return {'pairs':pairs,'closed_pairs':archived,'pnl_history':history,'hl_pnl':hl_pnl_windows(portfolio),'pnl_source':'local' if local_history else 'hyperliquid','operation_events':operation_events,'summary':summary,'last_updated_ms':int(time.time()*1000),
+    hl_windows=hl_pnl_windows(portfolio)
+    return {'pairs':pairs,'closed_pairs':archived,'pnl_history':history,'hl_pnl':hl_windows,'official_pnl':official_pnl_from_windows(hl_windows),'pnl_source':'local' if local_history else 'hyperliquid','operation_events':operation_events,'summary':summary,'last_updated_ms':int(time.time()*1000),
         'ledger':{kind:ledger.state(account,kind) for kind in ('fills','funding')},
         'warnings':(['Funding activo no verificable o desactualizado: neto N/D.'] if any(p.get('funding') is None for p in pairs) else []) + (['Funding de cerrados incompleto: neto N/D.'] if any(p.get('total_pnl') is None for p in archived) else []) + ([] if fills_complete else [f'Historial de fills incompleto; realizado y comisiones no disponibles con certeza ({fills_error or "límite API"}).'])}
 

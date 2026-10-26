@@ -1,4 +1,4 @@
-import React,{useRef} from 'react';
+import React,{useRef,type ReactNode} from 'react';
 import type {Pair,PairAnalytics,PositionRatioChange} from '../types';
 import {money,num,tone} from '../format';
 import {parseSort} from '../sort';
@@ -7,10 +7,11 @@ const ratioChange=(value:number|null|undefined)=>value==null||!Number.isFinite(N
 const sortOptions=[['pnl:desc','PNL flotante · mayor primero'],['realized:desc','PNL realizado · mayor primero'],['total_pnl:desc','PNL total · mayor primero'],['pnl_pct:desc','PNL % · mayor primero'],['size:desc','Exposición · mayor primero'],['funding:desc','Funding · mayor primero'],['name:asc','Par · A-Z']] as const;
 
 /** Compact position rail: operational summary only; full details stay in Resumen del par. */
-export function PositionList({pairs,selected,search,sort,onSearch,onSort,onSelect,analytics: _analytics,ratioChanges}:{pairs:Pair[];selected:string;search:string;sort:string;onSearch:(s:string)=>void;onSort:(key:string)=>void;onSelect:(id:string)=>void;analytics?:Record<string,PairAnalytics>;ratioChanges?:Record<string,PositionRatioChange>}){
+export function PositionList({pairs,selected,search,sort,onSearch,onSort,onSelect,analytics: _analytics,ratioChanges,actions}:{actions?:ReactNode;pairs:Pair[];selected:string;search:string;sort:string;onSearch:(s:string)=>void;onSort:(key:string)=>void;onSelect:(id:string)=>void;analytics?:Record<string,PairAnalytics>;ratioChanges?:Record<string,PositionRatioChange>}){
  const {key}=parseSort(sort);
  const listRef=useRef<HTMLDivElement>(null);
  return <section className="panel positions" aria-label="Mis posiciones">
+  {actions&&<div className="positions-actions">{actions}</div>}
   <div className="panel-title"><h2>Mis posiciones</h2><span className="chip">{pairs.length} pares</span></div>
   <details className="position-filters">
    <summary>Filtros y orden <span>{key==='name'?'Par':key==='pnl'?'PNL flotante':key==='pnl_pct'?'PNL %':key==='total_pnl'?'PNL total':key==='realized'?'Realizado':key==='size'?'Exposición':'Funding'}</span></summary>

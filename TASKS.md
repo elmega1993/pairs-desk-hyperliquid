@@ -14,6 +14,8 @@ Estas tareas se mantienen alineadas con `docs/current/PLAN_CONSOLIDACION.md`. Ma
 - [ ] Dividir `App.tsx` en hooks y componentes más pequeños.
 - [x] Agregar pruebas de comportamiento para `PairActions` (contratos de expiración, bloqueo, refresco y errores HTTP).
 - [ ] Resolver navegación y controles en pantallas móviles.
+- [x] Mejorar lectura de PNL total, mini gráfico, escala acumulada y resumen compacto del par. Validado con build y pruebas focalizadas; falta ejecutar pytest en un entorno con pytest.
+- [x] Mantener el gráfico del Explorador accesible junto a la selección en escritorio y móvil. Validado con build y prueba estructural; falta smoke visual con Chromium.
 - [ ] Atenuar secciones sin contenido y mejorar indicadores que hoy dependen solo del color.
 
 ## Prioridad media — backend
