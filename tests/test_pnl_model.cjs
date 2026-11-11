@@ -24,6 +24,10 @@ assert.equal(r.segments.reduce((n,s)=>n+s.length,0),rows.length);
 assert.equal(toSegments(rows.slice(0,10)).segments.length,1);
 // el umbral nunca baja de 15 minutos
 assert.equal(gapThreshold([{time:0,pnl:0},{time:1000,pnl:1}]),15*MIN);
+// Official portfolio windows change sampling density; this is not a local logging outage.
+const official=[{time:1e12,pnl:0},{time:1e12+7*86400000,pnl:100},...Array.from({length:20},(_,i)=>({time:1e12+8*86400000+i*MIN,pnl:101+i}))];
+assert.equal(toSegments(official,gapThreshold(official,'hyperliquid')).segments.length,1);
+assert.ok(toSegments(official,gapThreshold(official,'local')).breaks.length>0);
 // los huecos conservan los valores de ambos extremos (para el conector punteado) y se suman
 const gapBreak=r.breaks.find(b=>b.kind==='gap');
 assert.equal(gapBreak.fromPnl,104);assert.equal(gapBreak.pnl,90);

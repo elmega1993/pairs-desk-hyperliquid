@@ -1,5 +1,5 @@
 import type {Pair} from '../types';
-import {money,tone} from '../format';
+import {expenseTone,money,tone} from '../format';
 
 export function PositionSummary({pair}:{pair:Pair|null}){
  if(!pair)return <div className="panel details"><h2>Resumen del par</h2><p>Sin posición</p></div>;
@@ -11,5 +11,5 @@ export function PositionSummary({pair}:{pair:Pair|null}){
   ['PNL flotante',pair.pnl,true,false],['PNL realizado',pair.realized,true,false],['PNL neto',pair.total_pnl,true,false],
   ['Funding',pair.funding,true,false],['Comisiones',pair.fees,true,false],
  ];
- return <div className="panel details"><h2>Resumen del par</h2>{fields.map(([label,value,numeric,highlight])=><div className={'detail-row '+(highlight?'leg-row ':'')+(label==='Exposición total'?'exposure-row':'')} key={label}><span>{label}</span><b className={label==='Exposición total'||label==='Nominal long'||label==='Nominal short'?'neutral':numeric?tone(value):''}>{numeric?money(value):String(value??'N/D')}</b></div>)}</div>;
+ return <div className="panel details"><h2>Resumen del par</h2>{fields.map(([label,value,numeric,highlight])=><div className={'detail-row '+(highlight?'leg-row ':'')+(label==='Exposición total'?'exposure-row':'')} key={label}><span>{label}</span><b className={label==='Exposición total'||label==='Nominal long'||label==='Nominal short'?'neutral':label==='Comisiones'?expenseTone(value):numeric?tone(value):''}>{numeric?money(value):String(value??'N/D')}</b></div>)}</div>;
 }

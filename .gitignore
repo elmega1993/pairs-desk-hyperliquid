@@ -27,3 +27,14 @@ settings.*.bak*
 .idea/
 react_frontend/.build-source-sha256
 .worktrees/
+
+# Local exports, recovery material and downloaded delivery copies
+/Archivos-Hyperliquid/
+/recuperacion/
+/backup_ui_v4_*/
+/pairs_desk_ui_v4*/
+/pairs_desk_ui_v4*.zip
+/pairs-desk-hyperliquid-main.zip
+/INSTRUCCIONES_CIERRES.txt
+*.sqlite3-wal
+*.sqlite3-shm

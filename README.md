@@ -2,6 +2,14 @@
 
 Aplicación de análisis de posiciones y ratios de Hyperliquid. React es la interfaz principal y se sirve en `/react`. La interfaz estable anterior continúa disponible en `/` y Aurora en `/aurora` como fallback legacy.
 
+## Funciones actuales
+
+- Desk: asesor con identidad editable, conversaciones y memoria persistentes. Codex App Server con sesión de ChatGPT y consentimiento de contexto; Ollama local como alternativa. [Guía](docs/current/DESK_MEMORIA.md).
+- TWAP nativo de Hyperliquid para aumentar, reducir y cerrar pares, duración en minutos/horas/días hasta 7 días, seguimiento/cancelación por pata y representación temporal en el gráfico. [Guía y límites](docs/current/NATIVE_TWAP.md).
+- Cuenta/estrategia, costos, funding, ratio/PNL, explorador y fuentes oficiales/estimadas identificadas. [Estado y verificación](CURRENT_STATE.md).
+
+Bases de datos, settings, memorias personales, credenciales, exportaciones y builds se generan/conservan localmente y no forman parte del repositorio. Las órdenes reales requieren configuración, previsualización y confirmación; las patas no se ejecutan atómicamente.
+
 ## Ubuntu
 
 Ejecutar `./iniciar_frontend.sh` desde la carpeta del proyecto. El lanzador prepara el entorno Python, verifica KLineCharts por SHA-256 y compila React únicamente si el código cambió o falta la compilación. Requiere Python 3 y Node.js 20+ con npm.

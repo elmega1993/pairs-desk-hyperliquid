@@ -97,3 +97,21 @@ def test_pair_trade_events_groups_adds_and_closes():
     assert events[0]['amount'] == 5 * 1.2 + 5 * 2.1
     assert events[1]['realized'] == 9.0
     assert events[1]['label'].startswith('CIERRE +$')
+
+
+def test_native_twap_fills_are_excluded_only_from_annotations_not_cycle_tracking():
+    pair = {'long':'A','short':'B','long_position':{'szi':'12'},'short_position':{'szi':'-12'}}
+    fills = [
+        {'coin':'A','tid':1,'time':1000,'side':'B','sz':'10','px':'10','startPosition':'0'},
+        {'coin':'B','tid':2,'time':1000,'side':'A','sz':'10','px':'10','startPosition':'0'},
+        {'coin':'A','tid':3,'time':400000,'side':'B','sz':'1','px':'10','startPosition':'10'},
+        {'coin':'B','tid':4,'time':400010,'side':'A','sz':'1','px':'10','startPosition':'-10'},
+        {'coin':'A','tid':5,'time':400030,'side':'B','sz':'1','px':'10','startPosition':'11'},
+        {'coin':'B','tid':6,'time':400040,'side':'A','sz':'1','px':'10','startPosition':'-11'},
+    ]
+    all_events = pair_trade_events(pair, fills)
+    chart_events = pair_trade_events(pair, fills, excluded_fill_keys={('A','3'),('B','4')})
+    assert all_events[0]['amount'] == 40
+    assert chart_events[0]['amount'] == 20
+    assert pair_trade_events(pair, fills, excluded_fill_keys={('A','3'),('B','4'),('A','5'),('B','6')}) == []
+    assert fills[2]['sz'] == '1'

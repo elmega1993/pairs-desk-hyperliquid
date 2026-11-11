@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# Si se lanza con doble clic, conservar la ventana abierta cuando haya un
+# error o cuando el servidor se detenga para poder leer el motivo y reiniciar.
+pause_on_exit(){
+  status=$?
+  if [ "${PAIRS_DESK_NO_PAUSE:-0}" != "1" ]; then
+    printf '\nPair Desk terminó con código %s. Presioná Enter para cerrar esta ventana.\n' "$status"
+    read -r || true
+  fi
+  exit "$status"
+}
+trap pause_on_exit EXIT
+
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 # Verifica siempre el SHA-256 de KLineCharts. Código 2 = integridad fallida: no se inicia.
 if command -v python3 >/dev/null 2>&1; then
@@ -24,7 +37,8 @@ if [ ! -d .venv_frontend ]; then
   fi
 fi
 . .venv_frontend/bin/activate
-python -m pip install -q -r requirements_frontend.txt
+PYTHON_BIN=".venv_frontend/bin/python"
+"$PYTHON_BIN" -m pip install -q -r requirements_frontend.txt
 if [ -f react_frontend/package.json ]; then
   if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
     MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
@@ -62,4 +76,4 @@ if [ -f react_frontend/package.json ]; then
 fi
 printf '\nAurora: http://127.0.0.1:8510/aurora\nReact (si compiló): http://127.0.0.1:8510/react\nVersión estable: http://127.0.0.1:8510/\n'
 printf 'Las operaciones reales requieren habilitación y confirmación explícitas. Ctrl+C para detener.\n'
-python -m uvicorn read_only_server:app --host 127.0.0.1 --port 8510
+"$PYTHON_BIN" -m uvicorn read_only_server:app --host 127.0.0.1 --port 8510

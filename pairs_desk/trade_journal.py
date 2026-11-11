@@ -47,6 +47,9 @@ def begin(conn, account: str, pair: str, action: str, legs: list[dict]):
     # BEGIN IMMEDIATE serializes competing writers/processes.
     conn.execute('BEGIN IMMEDIATE')
     try:
+        from .native_twap import overlap_sql
+        if overlap_sql(conn, account, [leg.get('coin') for leg in legs]):
+            raise RuntimeError('Hay un TWAP activo o incierto sobre estas patas')
         existing = pending(conn, account)
         if existing:
             raise RuntimeError('Existe una operación pendiente o de resultado incierto. Verificá Hyperliquid y conciliá la bitácora antes de volver a operar.')

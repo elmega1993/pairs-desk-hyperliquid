@@ -5,7 +5,10 @@ import secrets
 import threading
 import time
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+from fastapi import Query
+from pairs_desk.native_twap_monitor import NativeTwapMonitor
 from pairs_desk.agent_vault import load_agent
 from pairs_desk.trading import preview_pair, project_pair_action, execute_pair, verify_agent
 from pairs_desk.trade_journal import connect, begin, finish, pending, auto_reconcile_no_effect
@@ -17,6 +20,7 @@ _TICKETS={}
 _LOCK=threading.RLock()
 _MAX_TICKET_AGE=40
 _ARMED=False
+_NATIVE_MONITOR=NativeTwapMonitor()
 
 
 def _request_ok(request: Request, csrf: str):
@@ -138,11 +142,15 @@ def add_pair(request: Request, data: AddPairInput):
 
 
 class PreviewInput(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    execution: Literal['immediate','twap'] = 'immediate'
+    minutes: int = Field(default=30, ge=5, le=10080, strict=True)
+    randomize: bool = Field(default=False, strict=True)
     csrf: str
     pair_id: str=Field(min_length=3,max_length=128)
     operation: str
     fraction_pct: int=Field(ge=1,le=100)
-    slippage_pct: float=Field(ge=0.1,le=2.0)
+    slippage_pct: float=Field(default=0.5,ge=0.1,le=2.0)
 
 class ExecuteInput(BaseModel):
     csrf: str
@@ -210,16 +218,28 @@ def preview(request: Request,data: PreviewInput):
         try:
             if pending(conn,address):raise HTTPException(409,'Hay operaciones pendientes de conciliar')
         finally:conn.close()
+        from pairs_desk.native_twap import overlap_sql
+        conn=connect()
+        try:
+            if overlap_sql(conn,address,data.pair_id.split('|')):
+                raise HTTPException(409,'Hay un TWAP activo o incierto sobre estas patas. Revisalo antes de operar.')
+        finally:
+            conn.close()
         x=_current_pair(cfg,address,hl,data.pair_id)
         try:
             orders=preview_pair(x,data.operation,data.fraction_pct/100)
-            projection=project_pair_action(x,data.operation,data.fraction_pct/100,data.slippage_pct/100)
+            if data.execution=='twap':
+                from pairs_desk.native_twap import validate_twap_notional
+                validate_twap_notional(orders)
+            projection=project_pair_action(x,data.operation,data.fraction_pct/100,data.slippage_pct/100) if data.execution=='immediate' else None
         except ValueError as exc:raise HTTPException(400,str(exc))
         ticket_id=secrets.token_urlsafe(32)
         _TICKETS.clear()
-        _TICKETS[ticket_id]={'account':address,'pair':data.pair_id,'operation':data.operation,'orders':orders,'slippage':data.slippage_pct/100,'created':time.monotonic()}
+        _TICKETS[ticket_id]={'account':address,'pair':data.pair_id,'operation':data.operation,'orders':orders,'slippage':data.slippage_pct/100,'execution':data.execution,'minutes':data.minutes,'randomize':data.randomize,'created':time.monotonic()}
     clean=[{'coin':o['coin'],'order':'Comprar' if o['is_buy'] else 'Vender','reduce_only':o['reduce_only'],'size':o['size'],'usd':round(o['notional'],2)} for o in orders]
-    return {'ticket_id':ticket_id,'expires_in_s':_MAX_TICKET_AGE,'orders':clean,'total_usd':round(sum(o['notional'] for o in orders),2),'projection':projection,'warning':'Las dos patas no son atómicas. Confirmar en Hyperliquid ante una respuesta incierta.'}
+    return {'execution':data.execution,'minutes':data.minutes if data.execution=='twap' else None,'randomize':data.randomize,
+            'native_slippage_pct':3 if data.execution=='twap' else None,'slice_interval_s':30 if data.execution=='twap' else None,
+            'ticket_id':ticket_id,'expires_in_s':_MAX_TICKET_AGE,'orders':clean,'total_usd':round(sum(o['notional'] for o in orders),2),'projection':projection,'warning':'Las dos patas no son atómicas. Confirmar en Hyperliquid ante una respuesta incierta.'}
 
 @router.post('/execute')
 def execute(request: Request,data: ExecuteInput):
@@ -240,6 +260,28 @@ def execute(request: Request,data: ExecuteInput):
         from eth_account import Account
         try:verify_agent(address,Account.from_key(secret).address)
         except Exception as exc:raise HTTPException(409,f'Agent no autorizado: {type(exc).__name__}: {exc}')
+        if ticket.get('execution') == 'twap':
+            from pairs_desk.native_twap import submit_pair
+            try:
+                job=submit_pair(_native_store(),address,ticket['pair'],ticket['operation'],
+                                ticket['orders'],ticket['minutes'],ticket['randomize'],secret)
+            except (ValueError, RuntimeError) as exc:
+                safe_messages={
+                    'Existe una operación pendiente o incierta para estos activos',
+                    'Posición cambió desde la vista previa',
+                    'Cantidad inválida tras redondeo',
+                    'TWAP requiere al menos 100 USD por pata; el importe solicitado es menor al mínimo nativo.',
+                    'TWAP requiere de 5 a 10080 minutos enteros',
+                }
+                detail=str(exc) if str(exc) in safe_messages else 'No se pudo validar el TWAP. Actualizá la vista previa y consultá el seguimiento.'
+                raise HTTPException(409,detail) from None
+            except Exception:
+                raise HTTPException(409,'No se pudo verificar el envío TWAP. Consultá el seguimiento antes de reintentar.') from None
+            _NATIVE_MONITOR.ensure(address,_native_store())
+            accepted=all(leg['twap_id'] is not None and leg['status'] not in ('rejected','uncertain','submitting')
+                         for leg in job['legs'])
+            return {'execution':'twap','accepted':accepted,'job':job,
+                    'requires_manual_review':job['status'] in ('uncertain','partial','incomplete')}
         # The SDK independently checks leg sizes against fresh live state before sending.
         conn=connect();attempt=None
         try:
@@ -258,3 +300,64 @@ def execute(request: Request,data: ExecuteInput):
         except Exception as exc:
             raise HTTPException(409,f'Resultado incierto o ejecución fallida. Verificá directamente Hyperliquid antes de reintentar. {type(exc).__name__}: {str(exc)[:160]}')
         finally:conn.close()
+
+
+def _native_store():
+    from pairs_desk.native_twap import NativeTwapStore
+    return NativeTwapStore()
+
+
+def native_twap_view(account, pair_id=None, limit=50, offset=0):
+    store=_native_store()
+    jobs=store.list(account,pair_id=pair_id,limit=limit,offset=offset)
+    if jobs:
+        _NATIVE_MONITOR.ensure(account,store)
+    dexes={leg['coin'].split(':',1)[0] if ':' in leg['coin'] else '' for job in jobs for leg in job['legs']}
+    monitor=_NATIVE_MONITOR.status(account,dexes=dexes)
+    return {'items':jobs,'as_of_ms':monitor['as_of_ms'],'connected':monitor['connected'],'error':monitor['error']}
+
+
+@router.get('/twaps')
+def twaps(pair_id: str | None = Query(default=None,max_length=128),
+          limit: int = Query(default=50,ge=1,le=100),
+          offset: int = Query(default=0,ge=0)):
+    _,account,_=_account_and_positions()
+    return native_twap_view(account,pair_id,limit,offset)
+
+
+@router.get('/twaps/{job_id}/fills')
+def twap_fills(job_id: str, limit: int = Query(default=30,ge=1,le=100),
+               offset: int = Query(default=0,ge=0)):
+    _,account,_=_account_and_positions()
+    result=_native_store().fills(account,job_id,limit=limit,offset=offset)
+    if result is None:
+        raise HTTPException(404,'TWAP no encontrado en esta cuenta')
+    return result
+
+
+class CancelTwapInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    csrf: str
+    confirmation: Literal['CONFIRMAR']
+
+
+@router.post('/twaps/{job_id}/cancel')
+def cancel_twap(job_id: str, request: Request, data: CancelTwapInput):
+    _request_ok(request,data.csrf)
+    with _LOCK:
+        _,account,_=_account_and_positions()
+        store=_native_store()
+        if store.get(account,job_id) is None:
+            raise HTTPException(404,'TWAP no encontrado en esta cuenta')
+        secret=load_agent(account)
+        if not secret:
+            raise HTTPException(409,'Agent no disponible para cancelar en Hyperliquid')
+        from eth_account import Account
+        try:
+            verify_agent(account,Account.from_key(secret).address)
+            from pairs_desk.native_twap import cancel_pair
+            job=cancel_pair(store,account,job_id,secret)
+        except Exception:
+            raise HTTPException(409,'No se confirmó la cancelación. Revisá el estado en Hyperliquid antes de reintentar.') from None
+        _NATIVE_MONITOR.ensure(account,store)
+        return {'job':job,'requires_manual_review':job['status']=='uncertain'}

@@ -1,0 +1,28 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const ts=require(require.resolve('typescript',{paths:[path.join(__dirname,'../react_frontend')]}));
+const vm=require('node:vm');
+const code=fs.readFileSync(path.join(__dirname,'../react_frontend/src/assetSort.ts'),'utf8');
+const compiled=ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+const moduleObject={exports:{}};
+vm.runInNewContext(compiled,{module:moduleObject,exports:moduleObject.exports});
+const {sortAssets,nextAssetSort,filterByVolume,pairChangePct}=moduleObject.exports;
+const a=(symbol,c24,c7,vol)=>({instrument_id:'core:'+symbol,symbol,venue:'core',active:true,change_24h_pct:c24,change_7d_pct:c7,day_volume_usd:vol});
+const assets=[a('AAA',5,-10,2e6),a('BBB',-3,40,5e4),a('CCC',null,null,1e7),a('DDD',12,null,3e5)];
+const ids=(sort)=>Array.from(sortAssets(assets,sort),x=>x.symbol).join(',');
+assert.equal(ids('name'),'AAA,BBB,CCC,DDD');
+assert.equal(ids('24h:desc'),'DDD,AAA,BBB,CCC');
+assert.equal(ids('24h:asc'),'BBB,AAA,DDD,CCC');       // N/D siempre al final
+assert.equal(ids('7d:desc'),'BBB,AAA,CCC,DDD');
+assert.equal(ids('7d:asc'),'AAA,BBB,CCC,DDD');
+assert.equal(nextAssetSort('name','24h'),'24h:desc');
+assert.equal(nextAssetSort('24h:desc','24h'),'24h:asc');
+assert.equal(nextAssetSort('24h:asc','24h'),'name');
+assert.equal(nextAssetSort('24h:desc','7d'),'7d:desc');
+assert.deepEqual(Array.from(filterByVolume(assets,1e6),x=>x.symbol),['AAA','CCC']);
+assert.equal(filterByVolume(assets,0).length,4);
+assert.ok(Math.abs(pairChangePct(10,-5)-(1.1/0.95-1)*100)<1e-9);
+assert.equal(pairChangePct(null,5),null);
+assert.equal(pairChangePct(5,-100),null);
+console.log('OK: orden por suba/baja 24h y 7d, N/D al final, filtro de volumen, ratio del par');

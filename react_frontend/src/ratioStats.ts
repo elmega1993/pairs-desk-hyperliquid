@@ -21,8 +21,8 @@ const quantile=(values:number[],q:number)=>{
 };
 const median=(values:number[])=>quantile([...values].sort((a,b)=>a-b),.5);
 
-export function buildRatioStats(bars:RatioBar[],windowSize=180,horizon=14):RatioStats|null{
-  const values=bars.map(bar=>Number(bar.close)).filter(value=>Number.isFinite(value)&&value>0);
+export function buildRatioStats(bars:RatioBar[],windowSize=180,horizon=14,percentageScale=false):RatioStats|null{
+  const values=bars.map(bar=>Number(bar.close)).filter(Number.isFinite);
   if(values.length<2)return null;
   const sample=values.slice(-Math.max(2,Math.floor(windowSize)));
   const current=sample.at(-1)!;
@@ -36,8 +36,8 @@ export function buildRatioStats(bars:RatioBar[],windowSize=180,horizon=14):Ratio
   let up=0,down=0,flat=0;
   for(let i=0;i<forwardValues.length;i++){
     const target=sample[i+Math.max(1,horizon)];
-    if(!Number.isFinite(target)||forwardValues[i]<=0)continue;
-    const change=target/forwardValues[i]-1;
+    if(!Number.isFinite(target)||(!percentageScale&&forwardValues[i]<=0))continue;
+    const change=percentageScale?target-forwardValues[i]:target/forwardValues[i]-1;
     changes.push(change);
     if(change>0)up++; else if(change<0)down++; else flat++;
   }

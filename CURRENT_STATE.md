@@ -1,35 +1,27 @@
-# Estado actual
+# Estado actual — cierre 2026-11-11
 
-Fecha de referencia: 2026-10-26.
+## Interfaz y cuenta
 
-## Confirmado en esta copia
+React es la interfaz principal en `/react`; `/` y `/aurora` siguen como fallback. El escritorio incluye cuenta/estrategia, gráficos de PNL y ratio, explorador, cerrados y asesor. Se consolidaron cards de costos, funding por activo sin duplicación, exposición, filtros y series oficiales frente a estimaciones históricas. Ver `docs/current/HISTORICAL_ACCOUNT.md` y `docs/ARCHITECTURE.md` para cobertura y límites. El acceso móvil por Tailscale es privado y de consulta; requiere validación final en Android.
 
-- Rama de trabajo limpia al iniciar esta documentación.
-- Último commit observado: `0c6e8f4 feat: add scanner chart timeframe controls`.
-- React es la interfaz principal y se sirve en `/react`.
-- `/` y `/aurora` permanecen como interfaces legacy/fallback.
-- El frontend React incluye explorador de pares, gráficos de ratio y PNL, radar, estados de frescura y acciones de pares.
-- El dashboard React tiene `Mis posiciones` compacta (par, PNL y ratio 1h/24h), filtros en un desplegable y `Radar de posiciones` junto a `Pares cerrados` en escritorio.
-- `Resumen del par` muestra solo long/short, nominales, exposición total, PNL flotante, PNL long/short, PNL realizado, PNL neto, funding y comisiones; los valores numéricos usan color por signo.
-- Los cambios de ratio 1h/24h en `Mis posiciones` tienen tipografía y contraste reforzados para lectura en paneles angostos.
-- El PNL total oficial de las cards y la serie principal priorizan Hyperliquid; el cálculo local permanece como fallback y reconciliación.
-- La card de PNL total incluye una mini línea de evolución; el gráfico acumulado usa más ticks y la paleta verde/rosa del gráfico de ratio.
-- `Resumen del par` muestra exposición primero y las patas como `LONG/SHORT símbolo` con su PNL en la misma fila.
-- El detalle del Explorador queda sticky junto a la tabla en escritorio y vuelve al flujo normal en móvil.
-- `Pares cerrados` incluye el cambio del ratio desde el cierre cuando los fills y precios actuales son verificables.
-- KLineCharts se carga como archivo local verificado por SHA-256; todavía no es una dependencia npm importada por TypeScript.
-- El backend separa datos de mercado, ledger y órdenes en almacenamientos distintos.
-- Se agregó un análisis retrospectivo local en `scripts/analyze_operations.py`, con módulos puros en `pairs_desk/learning_data.py`, `operation_learning.py` y `learning_metrics.py`. Lee settings/SQLite en modo solo lectura y genera el informe privado en `~/.local/share/crypto-pairs-desk/analysis`.
-- El informe también reconcilia en vivo `perpMonth` de Hyperliquid y las patas activas; la última verificación identificó 14 pares activos y aproximadamente USD 2.454 de PNL de 30 días.
-- La bitácora de órdenes auto-reconcilia intentos `uncertain` solo cuando hubo únicamente intención, ningún envío/fill y las cantidades actuales coinciden con las originales; los desbalances reales siguen bloqueados. Ver `docs/current/AUTO_RECONCILIACION_TRADING.md`.
+## Desk
 
-## Riesgos conocidos
+Se extendió el asesor existente con identidad editable, conversaciones persistentes, memoria estructurada SQLite, FTS5, procedencia/revisiones, recuperación acotada, administración y modos Chat/Analyze/Research. Codex App Server es el proveedor predeterminado mediante la sesión existente de ChatGPT; modelo comprobado `gpt-5.6-sol`. Ollama sigue disponible con `PAIRS_DESK_ADVISOR_PROVIDER=ollama`; GPU local comprobada. El panel requiere consentimiento para enviar contexto seleccionado a Codex. El modelo no recibe credenciales ni tiene herramientas de órdenes. No confundir corrección de cálculos con calidad garantizada de recomendaciones. Research sin proveedores externos no promete investigación web. Ver `docs/current/DESK_MEMORIA.md`.
 
-- La interfaz contiene rutas de órdenes reales y la UI de órdenes React no está validada en testnet; la auto-reconciliación no envía órdenes.
-- `PairActions` ahora muestra el contador de tickets, bloquea tickets vencidos, refresca el par tras ejecutar y tolera respuestas HTTP no JSON; esto está validado localmente, pero no reemplaza la validación en testnet.
-- El plan vigente todavía contempla navegación móvil, separación adicional de `App.tsx` y tareas de backend.
-- No se debe tratar el historial local de PNL como continuo: puede contener huecos cuando no hubo registro.
+## TWAP nativo
 
-## Fuente de verdad
+Integrado en el ticket actual para aumentar, reducir y cerrar: minutos/horas/días, de 5 minutos a 7 días, mínimo nativo de USD100 por pata. Dos ejecuciones independientes, cantidades redondeadas y wire firmado mediante SDK oficial. Reserva durable, bloqueo por activos compartidos, cancelación confirmada incluso con nuevas órdenes deshabilitadas, recuperación sin reenvíos y seguimiento WebSocket por cuenta/dex. El administrador muestra estado/progreso/fills y errores saneados. El exchange puede rechazar por cantidad máxima de TWAP activos: se observó ese motivo, pero no se codifica un máximo numérico sin contrato verificado.
 
-Para el detalle histórico, consultar `docs/current/FASE_1_ESTADO.md`, `docs/current/PLAN_CONSOLIDACION.md` y `docs/history/CHANGELOG.md`.
+El gráfico agrupa cada TWAP en un tramo temporal. La media actual usa entryPx de Hyperliquid; la evolución histórica incorpora fills TWAP cacheados, deduplicados y reconciliados, exclusivamente para esa curva. No modifica PNL ni ledger. MEDIA ACTUAL aparece en 0% por escala normalizada. Ver `docs/current/NATIVE_TWAP.md`.
+
+## Verificación de cierre
+
+- Python: **534 passed, 1 skipped**. Se actualizaron las pruebas obsoletas de call-stats (contabilización al completar la petición) y Z-score (indicador nativo, dominio completo y valores rolling).
+- **21 suites JavaScript aprobadas** y build Vite aprobado. La compilación se genera localmente, no se versiona.
+- TypeScript estricto aún tiene errores previos en PnlChart/PortfolioKpis/pnlModel; no confundir build Vite con typecheck completo.
+- Se observaron aceptaciones nativas/fills iniciados por el usuario. Las pruebas del agente no enviaron órdenes, no cancelaron TWAP ni habilitaron trading. Cancelación contra exchange y fallos operativos extremos siguen sin validación integral en testnet.
+- Los datos personales, exportaciones, SQLite, settings, credenciales y copias de entregas quedan fuera de Git. El snapshot histórico detallado previo al cierre se conserva en almacenamiento local privado.
+
+## Retomar
+
+Leer START_HERE.md, AGENTS.md, TASKS.md y las guías de Desk/TWAP. No reinstalar driver/GPU ni rehacer el asesor. No reintentar órdenes inciertas ni cancelar trabajos para probar. Consultar el estado actual al abrir; no asumir que el estado de la sesión anterior sigue vigente.

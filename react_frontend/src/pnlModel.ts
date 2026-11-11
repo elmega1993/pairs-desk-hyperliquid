@@ -23,7 +23,8 @@ export function dailyPnl(rows:PnlPoint[]):DailyPnlRow[]{
 }
 
 /** Snapshots are only written while the app is open, so long holes are real "no data" periods. */
-export function gapThreshold(rows:PnlPoint[]):number{
+export function gapThreshold(rows:PnlPoint[],source?:string):number{
+ if(source==='hyperliquid')return Infinity;
  const steps:number[]=[];for(let i=1;i<rows.length;i++)steps.push(rows[i].time-rows[i-1].time);
  if(!steps.length)return 15*60000;
  steps.sort((a,b)=>a-b);
@@ -48,6 +49,11 @@ export function toSegments(rows:PnlPoint[],threshold=gapThreshold(rows)):{segmen
 }
 
 const RANGE_MS:Record<string,number>={'1d':86400000,'7d':604800000,'30d':2592000000};
+export function filterPnlRange(rows:PnlPoint[],range:string):PnlPoint[]{
+ const clean=normalizePnlHistory(rows);if(!clean.length||!RANGE_MS[range])return clean;
+ const end=clean[clean.length-1].time,start=end-RANGE_MS[range];
+ return clean.filter(row=>row.time>=start);
+}
 /** Picks the curve to draw. Hyperliquid's own windows are continuous; the local log has holes when the app was not running. */
 export function pickPnlSeries(hl:Record<string,PnlPoint[]>|undefined,local:PnlPoint[],range:string,want:'hl'|'local',now:number):{rows:PnlPoint[];source:'hyperliquid'|'local';fallback:boolean}{
  const h=hl?.[range]??[];

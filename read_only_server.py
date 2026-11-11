@@ -1,7 +1,7 @@
 """Pairs Desk local terminal API. Public read operations plus opt-in signed orders via OS keyring."""
 from __future__ import annotations
 from fastapi.responses import RedirectResponse
-import json, os, re, time
+import json, os, re, time, sqlite3, logging, hashlib
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -11,15 +11,26 @@ from fastapi import FastAPI, HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pairs_desk.local_advisor import Advisor
+from pairs_desk.advisor_routes import advisor_router
+from pairs_desk.ai.codex_provider import CodexProvider
+from pairs_desk.ai.memory import MemoryStore
+from pairs_desk.ai.service import DeskService
+from pairs_desk.ai.routes import desk_router
 from pairs_desk.storage import load_settings
 from pairs_desk.frontend_archive import archive_frontend
 from pairs_desk.metrics import candle_window, position_map, ratio_bars, liquidation_distance, closed_pair_trade_events, archived_pair_entry_ratio, management_signals
 from pairs_desk.closed_ratio import close_ratio_from_fills, ratio_change_since_close
 from pairs_desk.ratio_changes import ratio_changes_from_bars
 from pairs_desk.ledger import Ledger, active_funding
-from pairs_desk.funding_carry import funding_rates, pair_funding_carry
+from pairs_desk.funding_carry import aggregate_funding_projection, funding_rates, pair_funding_carry
+from pairs_desk.strategy_analytics import strategy_snapshot, portfolio_strategy_daily, aligned_portfolio_history
+from pairs_desk.historical_account import archive_official_history, reconstructed_daily
+from pairs_desk.mobile_access import allowed_hosts as mobile_allowed_hosts
 from pairs_desk.market_catalog import MarketCatalog
 from pairs_desk.market_assets import AssetUniverseService
+from pairs_desk.asset_changes import WeeklyReferenceStore, WeeklyReferenceWorker, attach_changes, priority_order, weekly_progress, DEFAULT_INTERVAL_S
+import threading
 from pairs_desk.market_pair_analysis import PairAnalysisService
 from pairs_desk.market_scanner import MarketScanner, bootstrap_catalog_from_settings
 from pairs_desk.market_storage import MarketDataStore
@@ -32,10 +43,107 @@ MARKET_DB = Path.home()/'.local'/'share'/'crypto-pairs-desk'/'market.sqlite3'
 MARKET_DATA = Path.home()/'.local'/'share'/'crypto-pairs-desk'/'market-data'
 ADDRESS = re.compile(r'^0x[a-fA-F0-9]{40}$')
 API = 'https://api.hyperliquid.xyz/info'
+STRATEGY_START_MS = 1790132400000  # 23/09/2026 00:00 Buenos Aires
+FUNDING_RATE_TTL_MS = 300_000
+_FUNDING_RATE_CACHE = None
+_NONFUNDING_CACHE = None
+_OFFICIAL_HISTORY_LOCK = threading.Lock()
 app = FastAPI(title='Pairs Desk · Terminal local', docs_url=None, redoc_url=None)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost', '127.0.0.1', '[::1]', 'testserver'])
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=mobile_allowed_hosts(Path.home()/'.config/crypto-pairs-desk/remote_access.json'))
+_api_stats_lock = threading.Lock()
+_api_stats = {'started_at_ms': int(time.time() * 1000), 'http': {}, 'hyperliquid': {}}
+
+def _record_stat(bucket, key, duration_ms, status=None):
+    with _api_stats_lock:
+        row = bucket.setdefault(key, {'count': 0, 'errors': 0, 'total_ms': 0.0, 'max_ms': 0.0, 'last_ms': 0.0})
+        row['count'] += 1
+        row['errors'] += int(status is not None and status >= 400)
+        row['total_ms'] += duration_ms
+        row['max_ms'] = max(row['max_ms'], duration_ms)
+        row['last_ms'] = duration_ms
+
+@app.middleware('http')
+async def measure_http_requests(request, call_next):
+    started = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        if request.url.path.startswith('/api/'):
+            _record_stat(_api_stats['http'], request.url.path, (time.perf_counter() - started) * 1000, status)
+
 from secure_trade_routes import router as trade_router
 app.include_router(trade_router)
+
+def _advisor_ledger(kind, account):
+    # Open the existing ledger read-only, pinned to the account of this query.
+    from contextlib import closing
+    from pairs_desk.ledger import DEFAULT_PATH
+    if not account or kind not in ('fills', 'funding'):
+        raise ValueError('Ledger no disponible')
+    with closing(sqlite3.connect(f'file:{DEFAULT_PATH}?mode=ro', uri=True)) as db:
+        rows = [json.loads(row[0]) for row in db.execute(
+            'SELECT payload FROM events WHERE account=? AND kind=? ORDER BY time,identity',
+            (account.lower(), kind))]
+        coverage = db.execute('SELECT payload FROM sync_state WHERE account=? AND kind=?',
+                              (account.lower(), kind)).fetchone()
+    return {'rows': rows, 'coverage': json.loads(coverage[0]) if coverage else {}}
+
+def _advisor_candles(pair_id, interval, limit):
+    result = chart(pair_id, interval=interval, limit=max(50, limit))
+    return dict(result, bars=result.get('bars', [])[-limit:])
+
+ADVISOR_PROVIDER = os.environ.get('PAIRS_DESK_ADVISOR_PROVIDER', 'codex')
+if ADVISOR_PROVIDER not in ('codex', 'ollama'):
+    raise ValueError('PAIRS_DESK_ADVISOR_PROVIDER debe ser codex u ollama')
+ADVISOR = Advisor(codex=CodexProvider(os.environ.get('PAIRS_DESK_CODEX_MODEL', 'gpt-5.6-sol'))
+                  if ADVISOR_PROVIDER == 'codex' else None,
+                  model=os.environ.get('PAIRS_DESK_ADVISOR_MODEL', 'qwen3.5:9b'),
+                  candles=_advisor_candles, ledger=_advisor_ledger)
+def _desk_account():
+    return str(load_settings(SETTINGS)[0].get('address') or '').lower()
+
+def _desk_identity():
+    # One settings read binds identity and operational data, even across account changes.
+    account=_desk_account()
+    scope=hashlib.sha256(f'{os.getuid()}:{account}'.encode()).hexdigest()
+    return scope,account
+
+def _desk_scope():
+    return _desk_identity()[0]
+
+DESK_DATA = Path(os.environ.get('PAIRS_DESK_AI_DATA_DIR', Path.home()/'.local/share/crypto-pairs-desk/desk'))
+DESK_EMBEDDER=None
+if os.environ.get('PAIRS_DESK_EMBEDDING_MODEL'):
+    from pairs_desk.ai.embeddings import OllamaLocalEmbedder
+    DESK_EMBEDDER=OllamaLocalEmbedder(os.environ['PAIRS_DESK_EMBEDDING_MODEL'])
+DESK_STORE = MemoryStore(DESK_DATA/'desk.sqlite3',embedder=DESK_EMBEDDER)
+DESK = DeskService(ADVISOR, DESK_STORE, _desk_scope, identity_provider=_desk_identity)
+app.include_router(advisor_router(ADVISOR, desk=DESK))
+app.include_router(desk_router(DESK))
+
+@app.middleware('http')
+async def guard_desk_requests(request, call_next):
+    if request.url.path.startswith('/api/advisor/'):
+        from fastapi.responses import JSONResponse
+        if request.headers.get('sec-fetch-site') == 'cross-site':
+            return JSONResponse({'detail':'Acceso de otro sitio no permitido'},status_code=403)
+        # Limit before JSON/Pydantic parsing, including requests without Content-Length.
+        maximum = 2_100_000 if request.url.path == '/api/advisor/import' else 32_000
+        chunks=[]; size=0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > maximum:
+                return JSONResponse({'detail':'Petición demasiado grande'},status_code=413)
+            chunks.append(chunk)
+        request._body=b''.join(chunks)
+        response=await call_next(request)
+        response.headers['Cache-Control']='no-store'
+        response.headers['X-Content-Type-Options']='nosniff'
+        return response
+    return await call_next(request)
 class LocalAssets(StaticFiles):
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
@@ -67,9 +175,33 @@ app.mount('/vendor', StaticFiles(directory=BASE/'pairs_desk'/'vendor'), name='ve
 _http = requests.Session()
 
 def hl(payload):
-    r = _http.post(API, json=payload, timeout=(4, 14))
-    r.raise_for_status()
-    return r.json()
+    kind = str(payload.get('type', 'unknown'))
+    venue = str(payload.get('dex') or 'core')
+    started = time.perf_counter()
+    status = None
+    try:
+        r = _http.post(API, json=payload, timeout=(4, 14))
+        status = r.status_code
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        status = status or 599
+        raise
+    finally:
+        _record_stat(_api_stats['hyperliquid'], f'{kind}:{venue}', (time.perf_counter() - started) * 1000, status)
+
+@app.get('/api/diagnostics/call-stats')
+def api_call_stats():
+    with _api_stats_lock:
+        snapshot = json.loads(json.dumps(_api_stats))
+    for group in ('http', 'hyperliquid'):
+        for row in snapshot[group].values():
+            row['avg_ms'] = round(row['total_ms'] / row['count'], 1) if row['count'] else 0
+            row['total_ms'] = round(row['total_ms'], 1)
+            row['max_ms'] = round(row['max_ms'], 1)
+            row['last_ms'] = round(row['last_ms'], 1)
+    snapshot['captured_at_ms'] = int(time.time() * 1000)
+    return snapshot
 
 def current_mids_for_closed(rows):
     """Read current Core/XYZ mids only when the closed-pair table needs them."""
@@ -100,6 +232,18 @@ def portfolio_windows(portfolio):
             out[item[0]]=item[1]
     return out
 
+def account_value_from_portfolio(portfolio):
+    windows=portfolio_windows(portfolio)
+    rows=(windows.get('allTime') or windows.get('perpAllTime') or {}).get('accountValueHistory') or []
+    clean=[]
+    for row in rows:
+        try:
+            if isinstance(row,(list,tuple)) and len(row)>=2:
+                clean.append((int(row[0]),float(row[1])))
+        except (TypeError,ValueError):
+            pass
+    return sorted(clean,key=lambda row:row[0])[-1][1] if clean else None
+
 HL_PNL_WINDOWS={'1d':'perpDay','7d':'perpWeek','30d':'perpMonth','all':'perpAllTime'}
 
 def hl_series(portfolio,key,limit=1500):
@@ -128,6 +272,96 @@ def official_pnl_from_windows(windows):
     return {key:(rows[-1]['pnl'] if rows else None) for key,rows in (windows or {}).items()} | {
         key:None for key in HL_PNL_WINDOWS if key not in (windows or {})
     }
+
+
+def _nonfunding_history(account, now_ms=None):
+    global _NONFUNDING_CACHE
+    now = int(time.time() * 1000) if now_ms is None else int(now_ms)
+    if _NONFUNDING_CACHE and now - _NONFUNDING_CACHE[0] < FUNDING_RATE_TTL_MS:
+        return _NONFUNDING_CACHE[1]
+    try:
+        rows = hl({'type': 'userNonFundingLedgerUpdates', 'user': account})
+        rows = rows if isinstance(rows, list) else []
+    except Exception:
+        rows = []
+    _NONFUNDING_CACHE = (now, rows)
+    return rows
+
+
+def strategy_data(portfolio, account, fills, fills_complete, ledger, unrealized, active_pairs, positions=None):
+    windows = portfolio_windows(portfolio)
+    history = retained_official_history(windows, account)
+    raw_official = (windows.get('perpAllTime') or {}).get('pnlHistory') or []
+    official_points=[]
+    for row in raw_official:
+        try:
+            if isinstance(row,(list,tuple)) and len(row)>=2:
+                official_points.append((int(row[0]),float(row[1])))
+        except (TypeError,ValueError):
+            pass
+    official_points.sort(key=lambda item:item[0])
+    official_all_time = official_points[-1][1] if official_points else None
+    start_points = [value for timestamp,value in official_points if timestamp >= STRATEGY_START_MS]
+    account_rows = (windows.get('allTime') or windows.get('perpAllTime') or {}).get('accountValueHistory') or []
+    funding_state = ledger.state(account, 'funding')
+    strategy = strategy_snapshot(
+        history,
+        account_rows,
+        fills,
+        ledger.rows(account, 'funding'),
+        STRATEGY_START_MS,
+        fills_complete=fills_complete,
+        funding_complete=funding_state.get('complete') is True and funding_state.get('covered_until') is not None,
+        unrealized=unrealized,
+        nonfunding_rows=_nonfunding_history(account),
+        account=account,
+        official_all_time_pnl=official_all_time,
+        official_start_pnl=start_points[0] if start_points else None,
+    )
+    strategy['daily'] = portfolio_strategy_daily(windows, STRATEGY_START_MS, history)
+    reconstruction = reconstructed_daily(SNAPSHOTS.parent/'historical_account.sqlite3', account, strategy['history'])
+    strategy['reconstructed_daily'] = reconstruction['daily']
+    strategy['reconstructed_as_of_ms'] = reconstruction['updated_ms']
+    projection = aggregate_funding_projection(active_pairs, _current_funding_rates(), positions=positions)
+    projection['as_of_ms'] = _FUNDING_RATE_CACHE[0] if _FUNDING_RATE_CACHE else None
+    strategy['funding_projection'] = projection
+    return strategy
+
+
+def retained_official_history(windows, account):
+    """Keep official cumulative samples, separately from local pair accounting."""
+    path = SNAPSHOTS.parent / 'official_strategy_history.json'
+    with _OFFICIAL_HISTORY_LOCK:
+        cached = []
+        try:
+            saved = json.loads(path.read_text(encoding='utf-8'))
+            if saved.get('account') == account.lower() and saved.get('basis') == 'perpAllTime':
+                cached = saved.get('rows', [])
+        except (OSError, ValueError, AttributeError):
+            pass
+        current = aligned_portfolio_history(windows)
+        if not current:
+            return []
+        # Reject stale/incompatible baselines rather than introducing artificial jumps.
+        current_map = {r['time']: r['pnl'] for r in current}
+        if any(abs(r['pnl']-current_map[r['time']]) > .01
+               for r in cached if r.get('time') in current_map):
+            cached = []
+        rows = [r for r in aligned_portfolio_history(windows, cached)
+                if r['time'] >= STRATEGY_START_MS]
+        try:
+            if not path.exists() or time.time()-path.stat().st_mtime >= 300:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = path.with_suffix('.tmp')
+                temporary.write_text(json.dumps({'account': account.lower(),
+                    'basis': 'perpAllTime', 'rows': rows}), encoding='utf-8')
+                temporary.chmod(0o600)
+                temporary.replace(path)
+                archive_official_history(path.parent/'historical_account.sqlite3',
+                                         path.parent/'ledger.sqlite3', account, rows)
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            logging.getLogger(__name__).warning('Official history archive unavailable: %s', type(exc).__name__)
+        return rows
 
 def local_pnl_history():
     if not SNAPSHOTS.exists(): return []
@@ -248,9 +482,12 @@ def states():
         portfolio=hl({'type':'portfolio','user':account})
     except Exception:
         portfolio=[]
+    account_value_total=account_value_from_portfolio(portfolio)
+    if account_value_total is None:
+        account_value_total=sum(equity) if equity else None
     operation_events=sorted(operation_events,key=lambda e:int(e.get('time') or 0),reverse=True)[:200]
     summary={'realized':realized_total,'active_realized':active_realized,'archived_realized':archived_realized,'fees':fees_total,'active_fees':active_fees,'archived_fees':archived_fees,'total':grand_total,'open_plus_realized':open_plus_realized,'unrealized':unreal,'exposure':exposure,'funding':funding_total,'margin_used':margin,'margin_core':core_margin,
-        'equity_core':core_equity,'margin_pct':None if not core_equity or core_equity<=0 else core_margin/core_equity*100,
+        'equity_core':core_equity,'account_value_total':account_value_total,'margin_pct':None if not core_equity or core_equity<=0 else core_margin/core_equity*100,
         'delta':sum(p['long_usd']-p['short_usd'] for p in pairs),
         'account_funding':account_funding}
     # A subtotal is useful but must not masquerade as fully verified net PNL.
@@ -262,9 +499,62 @@ def states():
     local_history=local_pnl_history()  # una sola lectura del archivo de snapshots
     history=local_history or pnl_history(portfolio)
     hl_windows=hl_pnl_windows(portfolio)
-    return {'pairs':pairs,'closed_pairs':archived,'pnl_history':history,'hl_pnl':hl_windows,'official_pnl':official_pnl_from_windows(hl_windows),'pnl_source':'local' if local_history else 'hyperliquid','operation_events':operation_events,'summary':summary,'last_updated_ms':int(time.time()*1000),
+    strategy=strategy_data(portfolio, account, fills, fills_complete, ledger,
+                           sum(safe_number(p.get('unrealizedPnl')) for p in pos.values()), pairs, positions=pos)
+    result = {'pairs':pairs,'closed_pairs':archived,'pnl_history':history,'hl_pnl':hl_windows,'official_pnl':official_pnl_from_windows(hl_windows),'strategy':strategy,'pnl_source':'local' if local_history else 'hyperliquid','operation_events':operation_events,'summary':summary,'last_updated_ms':int(time.time()*1000),
         'ledger':{kind:ledger.state(account,kind) for kind in ('fills','funding')},
         'warnings':(['Funding activo no verificable o desactualizado: neto N/D.'] if any(p.get('funding') is None for p in pairs) else []) + (['Funding de cerrados incompleto: neto N/D.'] if any(p.get('total_pnl') is None for p in archived) else []) + ([] if fills_complete else [f'Historial de fills incompleto; realizado y comisiones no disponibles con certeza ({fills_error or "límite API"}).'])}
+
+    _attach_native_twap_charts(result,account,fills,pos)
+    ADVISOR.observe_state(result, positions=pos, account=account)
+    return result
+
+def _attach_native_twap_charts(result, account, fills, positions):
+    from secure_trade_routes import native_twap_view, _native_store
+    from pairs_desk.metrics import pair_trade_events, closed_pair_trade_events
+    try:
+        view=native_twap_view(account,limit=100)
+        jobs=view['items']
+        result['twaps']=jobs
+        result['twaps_as_of_ms']=view['as_of_ms']
+        if not jobs:
+            return
+        keys=_native_store().fill_keys(account,job_ids=[job['id'] for job in jobs])
+        from pairs_desk.entry_history import entry_history, merge_entry_fills
+        coins={coin for pair in result['pairs'] for coin in (pair['long'],pair['short'])}
+        native_entry_fills=_native_store().entry_fills(account,coins)
+        entry_fills=merge_entry_fills(fills,native_entry_fills)
+        native_coins={row['coin'] for row in native_entry_fills}
+        for pair in result['pairs']:
+            pair_id=pair['id']
+            if native_coins.intersection((pair['long'],pair['short'])):
+                pair['entry_history']=entry_history(pair['long'],pair['short'],
+                    positions.get(pair['long'],{}),positions.get(pair['short'],{}),
+                    entry_fills,bool(pair.get('history_complete')))
+            selected=[job for job in jobs if job['pair_id']==pair_id and
+                      (not pair.get('opened_at') or job['planned_end_ms']>=pair['opened_at'])]
+            pair['twaps']=selected
+            pair['twaps_as_of_ms']=view['as_of_ms']
+            if selected and pair.get('events') is not None:
+                data=dict(pair,long_position=positions.get(pair['long'],{}),
+                          short_position=positions.get(pair['short'],{}))
+                pair['chart_events']=pair_trade_events(data,fills,excluded_fill_keys=keys)
+        for pair in result.get('closed_pairs',[]):
+            pair_id=pair.get('long','')+'|'+pair.get('short','')
+            selected=[job for job in jobs if job['pair_id']==pair_id and
+                      job['created_ms']<=int(pair.get('closed_at') or 0) and
+                      job['planned_end_ms']>=int(pair.get('opened_at') or 0)]
+            pair['twaps']=selected
+            pair['twaps_as_of_ms']=view['as_of_ms']
+            if selected:
+                # Filter only chart annotation rows, retaining full ledger/accounting.
+                display_fills=[f for f in fills if (f.get('coin'),str(f.get('tid'))) not in keys]
+                pair['chart_events']=closed_pair_trade_events(
+                    pair.get('long'),pair.get('short'),display_fills,
+                    pair.get('opened_at'),pair.get('closed_at'))
+    except Exception:
+        result.setdefault('warnings',[]).append('Seguimiento TWAP no disponible; verificá el estado en Hyperliquid.')
+
 
 @app.get('/')
 def home():return FileResponse(BASE/'frontend'/'index.html',headers={'Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://api.hyperliquid.xyz; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"})
@@ -297,6 +587,8 @@ def start_recorder():
 @app.on_event('shutdown')
 def stop_recorder():
     _RECORDER_STOP.set()
+    from secure_trade_routes import _NATIVE_MONITOR
+    _NATIVE_MONITOR.stop()
 
 @app.get('/api/state')
 def api_state():
@@ -338,13 +630,17 @@ def api_position_ratio_changes():
 
     start, end = candle_window(5, n=320, now_ms=now_ms)
 
+    coins = {coin for _, long, short, _ in active for coin in (long, short)}
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(coins)))) as candle_pool:
+        candle_futures = {coin: candle_pool.submit(hl, {'type': 'candleSnapshot', 'req': {
+            'coin': coin, 'interval': '5m', 'startTime': start, 'endTime': end,
+        }}) for coin in coins}
+
     def read_pair(item):
         pair_id, long, short, current_ratio = item
         try:
             def read(coin):
-                raw = hl({'type': 'candleSnapshot', 'req': {
-                    'coin': coin, 'interval': '5m', 'startTime': start, 'endTime': end,
-                }})
+                raw = candle_futures[coin].result()
                 return pd.DataFrame([
                     {'time': int(row['t']), 'open': float(row['o']), 'high': float(row['h']),
                      'low': float(row['l']), 'close': float(row['c'])}
@@ -385,15 +681,71 @@ def api_scanner(interval: str = '1h', search: str = '', venue: str = '', limit: 
     except Exception as exc:
         raise HTTPException(503, f'No se pudo leer el Scanner: {type(exc).__name__}')
 
+# --- Explorador: universo de activos con cambio 24h/7d y consumo acotado de Hyperliquid ---------
+# El universo (2 requests) se cachea en memoria; las recargas del navegador NO llegan a Hyperliquid.
+ASSET_CACHE_TTL_S = 30.0
+ASSET_FORCE_MIN_S = 10.0   # incluso con "Actualizar activos" no se consulta más seguido que esto
+WEEKLY_REFS = Path.home()/'.local'/'share'/'crypto-pairs-desk'/'asset_week_refs.json'
+_ASSET_CACHE: dict[str, Any] = {'at': 0.0, 'assets': None}
+_ASSET_LOCK = threading.Lock()
+_WEEKLY: dict[str, Any] = {'worker': None}
+
+def _weekly_worker():
+    if os.environ.get('PAIRS_DESK_DISABLE_WEEKLY_REFS') == '1':
+        return None
+    with _ASSET_LOCK:
+        if _WEEKLY['worker'] is None:
+            try:
+                interval = float(os.environ.get('PAIRS_DESK_WEEKLY_INTERVAL_S', DEFAULT_INTERVAL_S))
+            except ValueError:
+                interval = DEFAULT_INTERVAL_S
+            worker = WeeklyReferenceWorker(WeeklyReferenceStore(WEEKLY_REFS), lambda request: hl(request), interval_s=interval)
+            worker.start()
+            _WEEKLY['worker'] = worker
+        return _WEEKLY['worker']
+
+def _asset_universe(force: bool) -> list[dict[str, Any]]:
+    now = time.monotonic()
+    min_age = ASSET_FORCE_MIN_S if force else ASSET_CACHE_TTL_S
+    with _ASSET_LOCK:
+        cached = _ASSET_CACHE['assets']
+        if cached is not None and now - _ASSET_CACHE['at'] < min_age:
+            return cached
+    catalog = MarketCatalog(MARKET_DB)
+    assets = AssetUniverseService(lambda request: hl(request), catalog).list_assets()
+    fresh = [asset.to_dict() for asset in assets]
+    with _ASSET_LOCK:
+        _ASSET_CACHE['assets'], _ASSET_CACHE['at'] = fresh, now
+    worker = _weekly_worker()
+    if worker is not None:
+        worker.submit(priority_order(fresh))
+    return fresh
+
+def _advisor_cached_assets():
+    with _ASSET_LOCK:
+        cached=_ASSET_CACHE['assets']
+        age=time.monotonic()-_ASSET_CACHE['at']
+        if cached is None or age>ASSET_CACHE_TTL_S:
+            from pairs_desk.local_advisor import AdvisorError
+            raise AdvisorError('Catálogo sin lectura reciente. Abrí Explorador para actualizarlo.')
+        rows=[{k:row.get(k) for k in ('instrument_id','symbol','venue','mark_px','day_volume_usd')} for row in cached]
+    return {'as_of_ms':int((time.time()-age)*1000),'source':'Catálogo cacheado de Pair Desk','assets':rows[:60],
+            'total':len(rows),'limit':60}
+
+ADVISOR.assets=_advisor_cached_assets
+
 @app.get('/api/scanner/assets')
-def api_scanner_assets(search: str = '', venue: str = ''):
+def api_scanner_assets(search: str = '', venue: str = '', refresh: bool = False):
     clean_search, clean_venue = search.strip().lower(), venue.strip().lower()
     try:
-        catalog = MarketCatalog(MARKET_DB)
-        assets = AssetUniverseService(lambda request: hl(request), catalog).list_assets()
-        asset_dicts = [asset.to_dict() for asset in assets]
+        now_ms = int(time.time() * 1000)
+        universe = _asset_universe(refresh)
+        worker = _WEEKLY['worker']
+        refs = worker.store.snapshot() if worker is not None else {}
+        asset_dicts = attach_changes(universe, refs, now_ms)
         filtered = [asset for asset in asset_dicts if (not clean_search or clean_search in asset['symbol'].lower() or clean_search in asset['instrument_id'].lower()) and (not clean_venue or clean_venue == asset['venue'])]
-        return {'assets': filtered, 'total': len(filtered), 'as_of_ms': int(time.time() * 1000)}
+        liquid = priority_order(universe)
+        return {'assets': filtered, 'total': len(filtered), 'as_of_ms': now_ms, 'week': {**weekly_progress(liquid, refs, now_ms), 'enabled': worker is not None, 'rate_limited': bool(worker and worker.last_error)}}
     except Exception as exc:
         raise HTTPException(503, f'No se pudieron leer los activos: {type(exc).__name__}')
 
@@ -527,12 +879,17 @@ def _analytic_for_pair(pair, now_ms):
             'pair_status':status,'pair_status_reason':reason,'hit_rates':hit,
             'levels_v3':levels,**{k:v for k,v in mae.items() if k in ('mae_pct','mfe_pct','mae_usd','mfe_usd')}}
 
-def _current_funding_rates():
+def _current_funding_rates(now_ms=None):
     """Tasas de funding vigentes (core + xyz). Si una consulta falla, se omite sin romper la analítica."""
+    global _FUNDING_RATE_CACHE
+    now_ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
+    if _FUNDING_RATE_CACHE and now_ms - _FUNDING_RATE_CACHE[0] < FUNDING_RATE_TTL_MS:
+        return dict(_FUNDING_RATE_CACHE[1])
     rates={}
     for payload in ({'type':'metaAndAssetCtxs'},{'type':'metaAndAssetCtxs','dex':'xyz'}):
         try:rates.update(funding_rates(hl(payload)))
         except Exception:pass
+    _FUNDING_RATE_CACHE = (now_ms, dict(rates))
     return rates
 
 @app.get('/api/analytics')
@@ -571,7 +928,9 @@ def api_analytics():
         result.update(pair_funding_carry(long_coin,short_coin,pair.get('long_usd'),pair.get('short_usd'),rates))
         return pair['id'],result
     with ThreadPoolExecutor(max_workers=3) as pool: results=dict(pool.map(compute,pairs))
-    return {'as_of_ms':now_ms,'pairs':results}
+    result = {'as_of_ms':now_ms,'pairs':results}
+    ADVISOR.observe_analytics(result, account=account)
+    return result
 
 @app.get('/api/levels/{pair_id}')
 def api_levels_v3(pair_id:str):

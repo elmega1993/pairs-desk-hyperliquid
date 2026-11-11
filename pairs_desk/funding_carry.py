@@ -78,3 +78,53 @@ def pair_funding_carry(long_coin: str, short_coin: str, long_usd: Any, short_usd
     return {'funding_per_day_usd': per_day, 'funding_apr_pct': apr,
             'funding_long_rate_pct_h': long_rate * 100, 'funding_short_rate_pct_h': short_rate * 100,
             'funding_basis': BASIS, 'funding_reason': 'Estimado con la tasa vigente; cambia cada hora'}
+
+
+def aggregate_funding_projection(pairs: list[dict[str, Any]], rates: dict[str, float] | None,
+                                 *, positions: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Aggregate current-rate funding carry without hiding unavailable legs."""
+    if positions is not None:
+        totals = {'long': 0.0, 'short': 0.0}
+        live = set()
+        for coin, position in positions.items():
+            size = _finite(position.get('szi'))
+            notional = _finite(position.get('positionValue'))
+            rate = _lookup(rates or {}, coin)
+            if size == 0:
+                continue
+            if size is None or notional is None or rate is None:
+                return {'per_day_usd': None, 'per_week_usd': None, 'per_30d_usd': None,
+                        'long_per_day_usd': None, 'short_per_day_usd': None, 'pairs': None,
+                        'basis': BASIS, 'available': False,
+                        'reason': 'Tasas o nominales de la cuenta no disponibles'}
+            side = 'long' if size > 0 else 'short'
+            live.add((side, coin))
+            totals[side] += (-1 if size > 0 else 1) * rate * abs(notional) * HOURS_PER_DAY
+        legs = [(side, pair.get(side)) for pair in pairs for side in ('long', 'short')]
+        detail = aggregate_funding_projection(pairs, rates)
+        attribution = len(legs) == len(set(legs)) and set(legs) == live and detail['available']
+        per_day = totals['long'] + totals['short']
+        return {'per_day_usd': per_day, 'per_week_usd': per_day * 7, 'per_30d_usd': per_day * 30,
+                'long_per_day_usd': totals['long'], 'short_per_day_usd': totals['short'],
+                'pairs': detail['pairs'] if attribution else None,
+                'basis': BASIS, 'available': True,
+                'reason': None if attribution else 'Total por posiciones únicas. Hay activos compartidos o fuera de pares; no se atribuye por par.'}
+    contributions = []
+    for pair in pairs:
+        carry = pair_funding_carry(pair.get('long'), pair.get('short'), pair.get('long_usd'),
+                                   pair.get('short_usd'), rates)
+        if carry['funding_per_day_usd'] is None:
+            return {'per_day_usd': None, 'per_week_usd': None, 'per_30d_usd': None,
+                    'long_per_day_usd': None, 'short_per_day_usd': None, 'pairs': None,
+                    'basis': BASIS, 'available': False}
+        long_daily = -carry['funding_long_rate_pct_h'] / 100 * float(pair['long_usd']) * HOURS_PER_DAY
+        short_daily = carry['funding_short_rate_pct_h'] / 100 * float(pair['short_usd']) * HOURS_PER_DAY
+        contributions.append({'long': pair.get('long'), 'short': pair.get('short'),
+                              'long_per_day_usd': long_daily, 'short_per_day_usd': short_daily,
+                              'per_day_usd': carry['funding_per_day_usd']})
+    per_day = sum(row['per_day_usd'] for row in contributions)
+    return {'per_day_usd': per_day, 'per_week_usd': per_day * 7,
+            'per_30d_usd': per_day * 30, 'basis': BASIS, 'available': True,
+            'long_per_day_usd': sum(row['long_per_day_usd'] for row in contributions),
+            'short_per_day_usd': sum(row['short_per_day_usd'] for row in contributions),
+            'pairs': sorted(contributions, key=lambda row: row['per_day_usd'])}

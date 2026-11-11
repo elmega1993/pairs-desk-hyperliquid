@@ -3,4 +3,6 @@ export const signedMoney=(v:unknown)=>v==null||!Number.isFinite(Number(v))?'N/D'
 export const signedPct=(v:unknown)=>v==null||!Number.isFinite(Number(v))?'N/D':`${Number(v)>0?'+':''}${Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}%`;
 export const num=(v:unknown,d=2)=>v==null||!Number.isFinite(Number(v))?'N/D':Number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 export const tone=(v:unknown)=>v==null?'':Number(v)>=0?'positive':'negative';
+// Fees are stored as a positive amount, but represent an expense in the UI.
+export const expenseTone=(v:unknown)=>v==null?'':Number(v)>0?'negative':Number(v)<0?'positive':'';
 export const pref=(k:string,d:string)=>{try{return localStorage.getItem('pairs-react-'+k)||d}catch{return d}};

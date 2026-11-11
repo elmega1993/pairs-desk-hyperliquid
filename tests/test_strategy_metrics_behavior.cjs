@@ -1,0 +1,32 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const ts=require(require.resolve('typescript',{paths:[path.join(__dirname,'../react_frontend')]}));
+const cache={};
+function load(name){
+ if(cache[name])return cache[name];
+ const module={exports:{}};
+ const source=fs.readFileSync(path.join(__dirname,'../react_frontend/src',name+'.ts'),'utf8');
+ const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+ vm.runInNewContext(code,{module,exports:module.exports,require:id=>load(id.replace('./','')),Intl,Date,Math,Number,Map});
+ return cache[name]=module.exports;
+}
+const {dayMetrics,maxDrawdown,costImpact}=load('strategyMetrics');
+const dm=dayMetrics([{date:'2026-11-01',pnl:100},{date:'2026-11-02',pnl:50},{date:'2026-11-03',pnl:0},{date:'2026-11-04',pnl:-30},{date:'2026-11-05',pnl:null}]);
+assert.equal(dm.avgWin,75);
+assert.equal(dm.avgLoss,-30);
+assert.equal(dm.days,4);
+assert.equal(dayMetrics([{date:'2026-11-01',pnl:0}]).avgWin,null);
+assert.equal(dayMetrics([{date:'2026-11-01',pnl:0}]).avgLoss,null);
+const T=1800000000000;
+const dd=maxDrawdown([{time:T,pnl:0},{time:T+1000,pnl:100},{time:T+2000,pnl:20},{time:T+3000,pnl:60}]);
+assert.equal(dd.max,-80);
+assert.equal(dd.current,-40);
+assert.equal(dd.worstTime,T+2000);
+assert.equal(dd.needed,40);
+assert.equal(maxDrawdown([]).worstTime,null);
+assert.equal(maxDrawdown([]).needed,null);
+assert.equal(costImpact(10,-5),-15);
+assert.equal(costImpact(-2,5),7,'rebates aumentan el resultado');
+assert.equal(costImpact(null,5),null,'no presentar suma parcial');
+assert.equal(costImpact(5,null),null);
+console.log('OK: medias con ceros/faltantes, drawdown fechado, costos completos y rebates');

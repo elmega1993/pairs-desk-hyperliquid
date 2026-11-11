@@ -4,6 +4,21 @@ import math
 from .metrics import since_open, _fill_signed_qty, _fill_order_key
 
 
+def merge_entry_fills(regular, native):
+    """Merge only for entry reconstruction; regular fills remain authoritative."""
+    rows = list(regular)
+    def identity(row):
+        tid = row.get('tid')
+        return (row.get('coin'), str(tid), str(row.get('side', '')).upper()) if tid is not None else None
+    seen = {identity(row) for row in rows if identity(row) is not None}
+    for row in native:
+        key = identity(row)
+        if key is not None and key not in seen:
+            rows.append(row)
+            seen.add(key)
+    return rows
+
+
 def entry_history(long: str, short: str, long_pos: dict, short_pos: dict, fills: list[dict], complete: bool) -> dict:
     unavailable = {'available': False, 'reason': 'Historial de fills incompleto o no verificable', 'steps': []}
     if not complete:
@@ -13,7 +28,9 @@ def entry_history(long: str, short: str, long_pos: dict, short_pos: dict, fills:
         return unavailable
     opening = {}
     for coin, qty in legs:
-        t, _, _, ok = since_open(fills, coin, qty)
+        # Cached native fills have no startPosition; absence cannot mean flat.
+        boundaries = [row for row in fills if row.get('startPosition') is not None]
+        t, _, _, ok = since_open(boundaries, coin, qty)
         if not ok or not t:
             return unavailable
         opening[coin] = t
@@ -62,6 +79,15 @@ def entry_history(long: str, short: str, long_pos: dict, short_pos: dict, fills:
         reconstructed = state[coin][0]
         if abs(reconstructed-expected) > max(1e-6, abs(expected)*1e-5):
             return unavailable
+    for coin, position in ((long, long_pos), (short, short_pos)):
+        raw = position.get('entryPx')
+        if raw is not None:
+            try:
+                expected_avg = float(raw)
+            except (ValueError, TypeError):
+                return unavailable
+            if not math.isfinite(expected_avg) or expected_avg <= 0 or not math.isclose(state[coin][1], expected_avg, rel_tol=1e-4, abs_tol=1e-10):
+                return unavailable
     if not steps:
         return unavailable
     return {'available': True, 'initial_ratio': steps[0]['ratio'], 'current_ratio': steps[-1]['ratio'], 'steps': steps}

@@ -4,6 +4,8 @@ import read_only_server as server
 
 
 def test_assets_endpoint_returns_live_universe(monkeypatch):
+    monkeypatch.setenv('PAIRS_DESK_DISABLE_WEEKLY_REFS', '1')
+    monkeypatch.setattr(server, '_ASSET_CACHE', {'at': 0.0, 'assets': None})
     class FakeService:
         def __init__(self, fetch, catalog):
             pass

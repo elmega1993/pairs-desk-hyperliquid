@@ -1,5 +1,9 @@
 # START HERE
 
+## Continuación de la sesión 2026-11-11
+
+Estado consolidado en `CURRENT_STATE.md`. Desk usa Codex App Server por defecto; memoria/conversaciones e identidad persistentes. Ollama/GPU queda como alternativa comprobada. TWAP nativo integrado: 5min–7d, selector de unidades, seguimiento/cancelación, gráfico temporal y media histórica con fills nativos. Leer `docs/current/DESK_MEMORIA.md` y `docs/current/NATIVE_TWAP.md`. No reinstalar driver ni rehacer estas integraciones.
+
 ## Lectura rápida
 
 1. `AGENTS.md`: reglas de seguridad y trabajo.

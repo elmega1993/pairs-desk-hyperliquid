@@ -30,3 +30,11 @@ def test_malformed_rows_are_skipped():
 
 def test_legacy_all_time_history_is_unchanged():
     assert server.pnl_history(_portfolio()) == [{'time': 1000, 'pnl': 0.0}, {'time': 2000, 'pnl': 15.0}]
+
+
+def test_account_value_uses_latest_all_time_portfolio_equity():
+    portfolio = [
+        ['allTime', {'accountValueHistory': [[1000, '6500.00'], [2000, '6956.73']]}],
+        ['perpAllTime', {'accountValueHistory': [[1000, '4200.00'], [2000, '4438.04']]}],
+    ]
+    assert server.account_value_from_portfolio(portfolio) == 6956.73

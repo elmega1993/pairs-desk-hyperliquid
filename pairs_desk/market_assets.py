@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from typing import Any, Callable
+import math
 
 from .market_catalog import MarketCatalog, instrument_id
 
@@ -32,6 +33,9 @@ class AvailableAsset:
     venue: str
     sector: str = 'Sin clasificar'
     active: bool = True
+    mark_px: float | None = None
+    prev_day_px: float | None = None
+    day_volume_usd: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -42,17 +46,41 @@ class AssetUniverseService:
         self.fetch = fetch
         self.catalog = catalog
 
+    @staticmethod
+    def _split_payload(payload: Any) -> tuple[list[Any], list[Any]]:
+        """Acepta metaAndAssetCtxs ([meta, ctxs]) y, por compatibilidad, meta ({'universe': [...]})."""
+        if isinstance(payload, list) and len(payload) == 2 and isinstance(payload[0], dict):
+            universe = payload[0].get('universe', [])
+            contexts = payload[1] if isinstance(payload[1], list) else []
+        elif isinstance(payload, dict):
+            universe, contexts = payload.get('universe', []), []
+        else:
+            return [], []
+        if len(contexts) != len(universe):
+            contexts = []  # sin alineación segura no se asignan precios
+        return list(universe), list(contexts)
+
+    @staticmethod
+    def _positive(value: Any) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) and number > 0 else None
+
     def list_assets(self, venues: tuple[str, ...] = ('core', 'xyz')) -> tuple[AvailableAsset, ...]:
         assets: dict[str, AvailableAsset] = {}
         for venue in venues:
-            request: dict[str, Any] = {'type': 'meta'}
+            # metaAndAssetCtxs pesa igual que meta (20) y agrega precios y volumen sin requests extra.
+            request: dict[str, Any] = {'type': 'metaAndAssetCtxs'}
             if venue != 'core':
                 request['dex'] = venue
             try:
                 payload = self.fetch(request)
             except Exception:
                 continue
-            for entry in (payload or {}).get('universe', []) if isinstance(payload, dict) else []:
+            universe, contexts = self._split_payload(payload)
+            for index, entry in enumerate(universe):
                 if not isinstance(entry, dict) or entry.get('isDelisted'):
                     continue
                 symbol = str(entry.get('name') or entry.get('coin') or '').strip().upper()
@@ -61,8 +89,14 @@ class AssetUniverseService:
                     symbol = symbol[len(prefix):].strip()
                 if not symbol:
                     continue
+                ctx = contexts[index] if index < len(contexts) and isinstance(contexts[index], dict) else {}
+                mark = self._positive(ctx.get('markPx'))
+                volume = self._positive(ctx.get('dayNtlVlm'))
                 ident = instrument_id(symbol, venue)
-                asset = AvailableAsset(ident, symbol, venue, sector_for_symbol(symbol))
+                asset = AvailableAsset(
+                    ident, symbol, venue, sector_for_symbol(symbol),
+                    mark_px=mark, prev_day_px=self._positive(ctx.get('prevDayPx')), day_volume_usd=volume,
+                )
                 assets[ident] = asset
                 if self.catalog is not None:
                     self.catalog.upsert_instrument(symbol, venue, active=True, metadata={'source': 'hyperliquid_meta'})

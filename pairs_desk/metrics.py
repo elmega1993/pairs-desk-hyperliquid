@@ -148,7 +148,8 @@ def _cycle_fills(fills: Iterable[dict[str, Any]], coin: str, current_szi: float)
 
 
 def pair_trade_events(
-    pair: dict[str, Any], fills: list[dict[str, Any]], group_ms: int = 120_000, opening_grace_ms: int = 300_000
+    pair: dict[str, Any], fills: list[dict[str, Any]], group_ms: int = 120_000, opening_grace_ms: int = 300_000,
+    *, excluded_fill_keys: set[tuple[str, str]] | None = None
 ) -> list[dict[str, Any]]:
     """Build ADD/close annotations without mistaking staggered opening fills for adds."""
     long_sym, short_sym = pair['long'], pair['short']
@@ -164,6 +165,8 @@ def pair_trade_events(
     ):
         direction = 1 if current_szi >= 0 else -1
         for fill in coin_fills:
+            if excluded_fill_keys and (coin, str(fill.get('tid'))) in excluded_fill_keys:
+                continue
             fill_time = int(fill.get('time', 0) or 0)
             # Ignore every chunk belonging to the opening burst of *that leg*.
             if opened_at is not None and fill_time <= opened_at + opening_grace_ms:

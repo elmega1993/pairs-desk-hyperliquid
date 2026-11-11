@@ -1,0 +1,43 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const ts=require(require.resolve('typescript',{paths:[path.join(__dirname,'../react_frontend')]}));
+const source=fs.readFileSync(path.join(__dirname,'../react_frontend/src/advisorApi.ts'),'utf8');
+const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const moduleObject={exports:{}};
+let reply, request;
+vm.runInNewContext(code,{module:moduleObject,exports:moduleObject.exports,fetch:async(url,options)=>{request={url,options};return reply},TextDecoder,Error,JSON});
+const {askAdvisor,advisorHistory}=moduleObject.exports;
+const enc=new TextEncoder();
+function response(text,split=7){const bytes=enc.encode(text);let i=0;return {ok:true,body:{getReader:()=>({read:async()=>i>=bytes.length?{done:true}:{done:false,value:bytes.slice(i,(i+=split))},cancel:async()=>{},releaseLock(){}})}};}
+(async()=>{
+ const events=[];
+ reply=response('{"type":"token","text":"Ganó $3, ñ"}\n{"type":"done","sources":[]}\n',1);
+ await askAdvisor('x',[],e=>events.push(e));
+ assert.equal(events[0].text,'Ganó $3, ñ');assert.equal(events.at(-1).type,'done');
+ reply=response('{"type":"token","text":"parcial"}\n');
+ await assert.rejects(()=>askAdvisor('x',[],()=>{}),/interrump/);
+ reply=response('{"type":"error","message":"Ollama apagado"}\n');
+ await assert.rejects(()=>askAdvisor('x',[],()=>{}),/Ollama apagado/);
+ const history=advisorHistory(Array.from({length:20},(_,i)=>({role:i%2?'assistant':'user',content:'x'.repeat(2000)})));
+ assert.ok(history.length<=6);assert.ok(history.every(m=>m.content.length<=1000));
+ assert.ok(history.reduce((n,m)=>n+m.content.length,0)<=6500);
+ reply=response('{"type":"start","conversation_id":"c1","mode":"chat"}\n{"type":"done","memories_used":[{"id":"m1"}]}\n');
+ const persistent=[];
+ await askAdvisor('hola',[{role:'user',content:'private old chat'}],e=>persistent.push(e),undefined,{conversation_id:'c1',mode:'chat'});
+ assert.deepEqual(JSON.parse(request.options.body),{message:'hola',conversation_id:'c1',mode:'chat'});
+ assert.equal(persistent[0].conversation_id,'c1');assert.equal(persistent[1].memories_used[0].id,'m1');
+ for(const mode of ['auto','chat','analyze','research']){reply=response('{"type":"done"}\n');await askAdvisor('x',[],()=>{},undefined,{conversation_id:'c1',mode});assert.equal(JSON.parse(request.options.body).mode,mode)}
+ reply={ok:true,json:async()=>({items:[],total:95,limit:30,offset:60})};
+ await moduleObject.exports.deskApi.messages('c/1',30,60);
+ assert.equal(request.url,'/api/advisor/conversations/c%2F1/messages?limit=30&offset=60');
+ await moduleObject.exports.deskApi.memoryDuplicates('m/1',5);
+ assert.equal(request.url,'/api/advisor/memories/m%2F1/duplicates?limit=5');
+ await moduleObject.exports.deskApi.consolidateMemory('m/1',['m2']);
+ assert.equal(request.url,'/api/advisor/memories/m%2F1/consolidate');assert.equal(request.options.method,'POST');assert.deepEqual(JSON.parse(request.options.body),{duplicate_ids:['m2']});
+ await moduleObject.exports.deskApi.memoryRevisions('m/1',20,40);
+ assert.equal(request.url,'/api/advisor/memories/m%2F1/revisions?limit=20&offset=40');
+ await moduleObject.exports.deskApi.erase('DESK');
+ assert.equal(request.options.method,'DELETE');assert.deepEqual(JSON.parse(request.options.body),{confirmation:'DESK'});
+ reply={ok:false,json:async()=>({detail:[{msg:'invalid limit'}]})};
+ await assert.rejects(()=>moduleObject.exports.deskApi.conversations(),/invalid limit/);
+ console.log('OK: streaming UTF-8, errores, respuesta incompleta y contexto acotado');
+})().catch(e=>{console.error(e);process.exitCode=1});
